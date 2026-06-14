@@ -1,0 +1,45 @@
+﻿yara:
+  rules_path: "./rules"
+
+clamav:
+  host: "127.0.0.1"
+  port: 3310
+  timeout: 30
+
+sysmon:
+  channel: "Microsoft-Windows-Sysmon/Operational"
+
+quarantine:
+  path: "./quarantine"
+
+scan:
+  on_access: true       # 鏄惁鍚敤瀹炴椂鏂囦欢鐩戞帶
+  monitor_paths:
+    - "C:\\Users\\Public"
+    - "C:\\Temp"
+
+
+
+clamav:
+  host: "127.0.0.1"
+  port: 3310
+  timeout: 30
+
+
+clamav:
+  host: "127.0.0.1"
+  port: 3310
+  timeout: 30
+
+
+clamav:
+  host: "127.0.0.1"
+  port: 3310
+  timeout: 30
+
+
+clamav:
+  host: "127.0.0.1"
+  port: 3310
+  timeout: 30
+

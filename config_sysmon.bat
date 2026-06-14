@@ -1,0 +1,1 @@
+.\Sysmon.exe -accepteula -c sysmon_config.xml

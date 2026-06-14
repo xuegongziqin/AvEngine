@@ -1,0 +1,442 @@
+2026-06-14 15:31:52 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 15:31:52 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 15:31:52 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 15:31:55 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 15:31:57 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 15:31:57 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 15:31:57 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 15:31:57 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 15:31:57 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 15:31:57 [INFO] src.sysmon_monitor: 日志为空，将监听所有新事件
+2026-06-14 15:36:08 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 15:36:08 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 15:36:09 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 15:36:09 [INFO] src.scheduler: 调度器已停止
+2026-06-14 15:36:11 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 15:36:11 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 15:36:11 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 15:36:13 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 15:36:15 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 15:36:15 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 15:36:15 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 15:36:15 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 15:36:15 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 15:36:15 [INFO] src.sysmon_monitor: 日志为空，将监听所有新事件
+2026-06-14 15:39:49 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 15:39:49 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 15:39:50 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 15:39:50 [INFO] src.scheduler: 调度器已停止
+2026-06-14 15:39:53 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 15:39:53 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 15:39:53 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 15:39:54 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 15:39:56 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 15:39:56 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 15:39:56 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 15:39:56 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 15:39:56 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 15:41:40 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 15:41:40 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 15:41:40 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 15:41:40 [INFO] src.scheduler: 调度器已停止
+2026-06-14 15:41:46 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 15:41:46 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 15:41:46 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 15:41:47 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 15:41:49 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 15:41:49 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 15:41:49 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 15:41:49 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 15:41:49 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 15:45:47 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 15:45:47 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 15:45:47 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 15:45:47 [INFO] src.scheduler: 调度器已停止
+2026-06-14 15:45:49 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 15:45:49 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 15:45:49 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 15:45:50 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 15:45:52 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 15:45:52 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 15:45:52 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 15:45:52 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 15:45:52 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 15:48:42 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 15:48:42 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 15:48:42 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 15:48:42 [INFO] src.scheduler: 调度器已停止
+2026-06-14 15:48:44 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 15:48:44 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 15:48:44 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 15:48:45 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 15:48:47 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 15:48:47 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 15:48:47 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 15:48:47 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 15:48:47 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 15:50:44 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 15:50:44 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 15:50:44 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 15:50:44 [INFO] src.scheduler: 调度器已停止
+2026-06-14 15:51:30 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 15:51:30 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 15:51:30 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 15:51:33 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 15:51:35 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 15:51:35 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 15:51:35 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 15:51:35 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 15:51:35 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 15:51:35 [INFO] src.sysmon_monitor: EvtQuery 句柄创建成功
+2026-06-14 15:53:25 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 15:53:25 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 15:53:25 [INFO] src.sysmon_monitor: 查询句柄已关闭
+2026-06-14 15:53:25 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 15:53:26 [INFO] src.scheduler: 调度器已停止
+2026-06-14 15:53:30 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 15:53:30 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 15:53:30 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 15:53:32 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 15:53:34 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 15:53:34 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 15:53:34 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 15:53:34 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 15:53:34 [INFO] src.sysmon_monitor: 查询: *[System[EventID=2 or EventID=11]]
+2026-06-14 15:53:34 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 15:53:34 [INFO] src.sysmon_monitor: EvtQuery 句柄创建成功
+2026-06-14 15:53:39 [INFO] src.sysmon_monitor: 心跳 (循环 10, last_record_id=0)
+2026-06-14 15:53:44 [INFO] src.sysmon_monitor: 心跳 (循环 20, last_record_id=0)
+2026-06-14 15:53:49 [INFO] src.sysmon_monitor: 心跳 (循环 30, last_record_id=0)
+2026-06-14 15:53:54 [INFO] src.sysmon_monitor: 心跳 (循环 40, last_record_id=0)
+2026-06-14 15:53:59 [INFO] src.sysmon_monitor: 心跳 (循环 50, last_record_id=0)
+2026-06-14 15:54:05 [INFO] src.sysmon_monitor: 心跳 (循环 60, last_record_id=0)
+2026-06-14 15:54:10 [INFO] src.sysmon_monitor: 心跳 (循环 70, last_record_id=0)
+2026-06-14 15:58:22 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 15:58:22 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 15:58:22 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 15:58:40 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 15:58:40 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 15:58:40 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 15:58:42 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 15:58:44 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 15:58:44 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 15:58:44 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 15:58:44 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 15:58:44 [INFO] src.sysmon_monitor: 查询: *[System[EventID=2 or EventID=11]]
+2026-06-14 15:58:44 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 15:58:44 [INFO] src.sysmon_monitor: EvtQuery 句柄创建成功
+2026-06-14 15:58:48 [INFO] src.sysmon_monitor: 心跳 (循环 10, last_record_id=0)
+2026-06-14 15:58:53 [INFO] src.sysmon_monitor: 心跳 (循环 20, last_record_id=0)
+2026-06-14 15:58:59 [INFO] src.sysmon_monitor: 心跳 (循环 30, last_record_id=0)
+2026-06-14 15:59:04 [INFO] src.sysmon_monitor: 心跳 (循环 40, last_record_id=0)
+2026-06-14 15:59:09 [INFO] src.sysmon_monitor: 心跳 (循环 50, last_record_id=0)
+2026-06-14 15:59:14 [INFO] src.sysmon_monitor: 心跳 (循环 60, last_record_id=0)
+2026-06-14 15:59:19 [INFO] src.sysmon_monitor: 心跳 (循环 70, last_record_id=0)
+2026-06-14 16:03:21 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 16:03:21 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 16:03:21 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 16:03:23 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:03:25 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 16:03:25 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 16:03:25 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 16:03:25 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 16:03:25 [INFO] src.sysmon_monitor: 查询: *
+2026-06-14 16:03:25 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 16:03:25 [INFO] src.sysmon_monitor: EvtQuery 句柄创建成功
+2026-06-14 16:03:25 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:26 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:26 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:27 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:27 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:28 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:28 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:29 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:30 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:30 [INFO] src.sysmon_monitor: 心跳 (循环 10, last_record_id=180)
+2026-06-14 16:03:30 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:31 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:46 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:46 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:47 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:47 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:49 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:50 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:51 [INFO] src.sysmon_monitor: 获取到 20 个事件
+2026-06-14 16:03:51 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 16:03:51 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 16:03:51 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 16:03:51 [INFO] src.scheduler: 调度器已停止
+2026-06-14 16:04:54 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 16:04:54 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 16:04:54 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 16:04:56 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:04:58 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 16:04:58 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 16:04:58 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 16:04:58 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 16:04:58 [INFO] src.sysmon_monitor: 查询: *[System[EventID=2 or EventID=11]]
+2026-06-14 16:04:58 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 16:04:58 [INFO] src.sysmon_monitor: EvtQuery 句柄创建成功
+2026-06-14 16:04:58 [INFO] src.sysmon_monitor: 获取到 2 个事件
+2026-06-14 16:05:02 [INFO] src.sysmon_monitor: 心跳 (循环 10, last_record_id=3523)
+2026-06-14 16:05:07 [INFO] src.sysmon_monitor: 心跳 (循环 20, last_record_id=3523)
+2026-06-14 16:05:13 [INFO] src.sysmon_monitor: 心跳 (循环 30, last_record_id=3523)
+2026-06-14 16:05:18 [INFO] src.sysmon_monitor: 心跳 (循环 40, last_record_id=3523)
+2026-06-14 16:05:23 [INFO] src.sysmon_monitor: 心跳 (循环 50, last_record_id=3523)
+2026-06-14 16:05:28 [INFO] src.sysmon_monitor: 心跳 (循环 60, last_record_id=3523)
+2026-06-14 16:05:33 [INFO] src.sysmon_monitor: 心跳 (循环 70, last_record_id=3523)
+2026-06-14 16:05:38 [INFO] src.sysmon_monitor: 心跳 (循环 80, last_record_id=3523)
+2026-06-14 16:05:43 [INFO] src.sysmon_monitor: 心跳 (循环 90, last_record_id=3523)
+2026-06-14 16:05:44 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 16:05:44 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 16:05:44 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 16:05:44 [INFO] src.scheduler: 调度器已停止
+2026-06-14 16:08:48 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:08:50 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 16:08:50 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 16:08:50 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 16:08:50 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 16:08:50 [INFO] src.sysmon_monitor: 查询: *[System[EventID=2 or EventID=11]]
+2026-06-14 16:08:50 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 16:08:50 [INFO] src.sysmon_monitor: EvtQuery 句柄创建成功
+2026-06-14 16:08:51 [INFO] src.sysmon_monitor: 获取到 2 个事件
+2026-06-14 16:08:55 [INFO] src.sysmon_monitor: 心跳 (循环 10, last_record_id=3523)
+2026-06-14 16:08:57 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 16:08:57 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 16:08:57 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 16:08:58 [INFO] src.scheduler: 调度器已停止
+2026-06-14 16:09:39 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 16:09:39 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 16:09:39 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 16:09:41 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:09:43 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 16:09:43 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 16:09:44 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 16:09:44 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 16:09:44 [INFO] src.sysmon_monitor: 查询: *[System[EventID=2 or EventID=11]]
+2026-06-14 16:09:44 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 16:09:44 [INFO] src.sysmon_monitor: EvtQuery 句柄创建成功
+2026-06-14 16:09:44 [INFO] src.sysmon_monitor: 获取到 2 个事件
+2026-06-14 16:10:12 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 16:10:12 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 16:10:12 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 16:10:13 [INFO] src.scheduler: 调度器已停止
+2026-06-14 16:12:58 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:13:00 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 16:13:00 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 16:13:00 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 16:13:00 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 16:13:00 [INFO] src.sysmon_monitor: 查询: *[System[EventID=2 or EventID=11]]
+2026-06-14 16:13:00 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 16:13:00 [INFO] src.sysmon_monitor: EvtQuery 句柄创建成功
+2026-06-14 16:13:00 [INFO] src.sysmon_monitor: 获取到 4 个事件
+2026-06-14 16:13:24 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 16:13:24 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 16:13:25 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 16:13:25 [INFO] src.scheduler: 调度器已停止
+2026-06-14 16:13:27 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:13:29 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 16:13:29 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 16:13:29 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 16:13:29 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 16:13:29 [INFO] src.sysmon_monitor: 查询: *[System[EventID=2 or EventID=11]]
+2026-06-14 16:13:29 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 16:13:29 [INFO] src.sysmon_monitor: EvtQuery 句柄创建成功
+2026-06-14 16:13:29 [INFO] src.sysmon_monitor: 获取到 5 个事件
+2026-06-14 16:13:29 [INFO] src.scheduler: 正在扫描文件: C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\notepad_test.exe (来源: sysmon)
+2026-06-14 16:15:56 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 16:15:56 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 16:15:57 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 16:15:57 [INFO] src.scheduler: 调度器已停止
+2026-06-14 16:16:49 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 16:16:49 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 16:16:49 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 16:16:50 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:16:52 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 16:16:52 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 16:16:52 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 16:16:52 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 16:16:52 [INFO] src.sysmon_monitor: 查询: *[System[EventID=2 or EventID=11]]
+2026-06-14 16:16:52 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 16:16:57 [INFO] src.sysmon_monitor: 心跳 (循环 10, last_record_id=3829)
+2026-06-14 16:16:59 [INFO] src.scheduler: 正在扫描文件: C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\notepad_test.exe (来源: sysmon)
+2026-06-14 16:17:02 [INFO] src.sysmon_monitor: 心跳 (循环 20, last_record_id=3949)
+2026-06-14 16:17:07 [INFO] src.scheduler: 正在扫描文件: C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\notepad_test.exe (来源: sysmon)
+2026-06-14 16:17:07 [INFO] src.sysmon_monitor: 心跳 (循环 30, last_record_id=3950)
+2026-06-14 16:17:12 [INFO] src.sysmon_monitor: 心跳 (循环 40, last_record_id=3950)
+2026-06-14 16:17:17 [INFO] src.sysmon_monitor: 心跳 (循环 50, last_record_id=3950)
+2026-06-14 16:17:23 [INFO] src.sysmon_monitor: 心跳 (循环 60, last_record_id=3950)
+2026-06-14 16:17:28 [INFO] src.sysmon_monitor: 心跳 (循环 70, last_record_id=3950)
+2026-06-14 16:17:33 [INFO] src.sysmon_monitor: 心跳 (循环 80, last_record_id=3950)
+2026-06-14 16:17:38 [INFO] src.sysmon_monitor: 心跳 (循环 90, last_record_id=3950)
+2026-06-14 16:17:43 [INFO] src.sysmon_monitor: 心跳 (循环 100, last_record_id=3950)
+2026-06-14 16:17:48 [INFO] src.sysmon_monitor: 心跳 (循环 110, last_record_id=3950)
+2026-06-14 16:17:53 [INFO] src.sysmon_monitor: 心跳 (循环 120, last_record_id=3950)
+2026-06-14 16:17:58 [INFO] src.sysmon_monitor: 心跳 (循环 130, last_record_id=3950)
+2026-06-14 16:18:03 [INFO] src.sysmon_monitor: 心跳 (循环 140, last_record_id=3950)
+2026-06-14 16:18:08 [INFO] src.sysmon_monitor: 心跳 (循环 150, last_record_id=3950)
+2026-06-14 16:18:14 [INFO] src.sysmon_monitor: 心跳 (循环 160, last_record_id=3950)
+2026-06-14 16:18:19 [INFO] src.sysmon_monitor: 心跳 (循环 170, last_record_id=3950)
+2026-06-14 16:18:24 [INFO] src.sysmon_monitor: 心跳 (循环 180, last_record_id=3950)
+2026-06-14 16:18:29 [INFO] src.sysmon_monitor: 心跳 (循环 190, last_record_id=3950)
+2026-06-14 16:18:30 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 16:18:30 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 16:18:30 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 16:18:30 [INFO] src.scheduler: 调度器已停止
+2026-06-14 16:18:33 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 16:18:33 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 16:18:33 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 16:18:36 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:18:38 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 16:18:38 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 不可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 16:18:38 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 16:18:38 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 16:18:38 [INFO] src.sysmon_monitor: 查询: *[System[EventID=2 or EventID=11]]
+2026-06-14 16:18:38 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 16:18:43 [INFO] src.sysmon_monitor: 心跳 (循环 10, last_record_id=3950)
+2026-06-14 16:18:48 [INFO] src.sysmon_monitor: 心跳 (循环 20, last_record_id=3950)
+2026-06-14 16:18:53 [INFO] src.sysmon_monitor: 心跳 (循环 30, last_record_id=3950)
+2026-06-14 16:18:58 [INFO] src.sysmon_monitor: 心跳 (循环 40, last_record_id=3950)
+2026-06-14 16:19:03 [INFO] src.sysmon_monitor: 心跳 (循环 50, last_record_id=3950)
+2026-06-14 16:19:08 [INFO] src.sysmon_monitor: 心跳 (循环 60, last_record_id=3950)
+2026-06-14 16:19:14 [INFO] src.sysmon_monitor: 心跳 (循环 70, last_record_id=3950)
+2026-06-14 16:19:19 [INFO] src.sysmon_monitor: 心跳 (循环 80, last_record_id=3950)
+2026-06-14 16:19:24 [INFO] src.sysmon_monitor: 心跳 (循环 90, last_record_id=3950)
+2026-06-14 16:19:29 [INFO] src.sysmon_monitor: 心跳 (循环 100, last_record_id=3950)
+2026-06-14 16:19:31 [INFO] src.scheduler: 正在扫描文件: C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\新建文本文档.txt (来源: sysmon)
+2026-06-14 16:19:31 [ERROR] src.yara_scanner: YARA 扫描文件 C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\新建文本文档.txt 时出错: could not open file "C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\新建文本文档.txt"
+2026-06-14 16:19:31 [INFO] src.scheduler: 扫描完成，未发现威胁: C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\新建文本文档.txt
+2026-06-14 16:19:34 [INFO] src.sysmon_monitor: 心跳 (循环 110, last_record_id=4020)
+2026-06-14 16:19:39 [INFO] src.sysmon_monitor: 心跳 (循环 120, last_record_id=4020)
+2026-06-14 16:19:44 [INFO] src.sysmon_monitor: 心跳 (循环 130, last_record_id=4028)
+2026-06-14 16:19:49 [INFO] src.sysmon_monitor: 心跳 (循环 140, last_record_id=4028)
+2026-06-14 16:19:54 [INFO] src.sysmon_monitor: 心跳 (循环 150, last_record_id=4028)
+2026-06-14 16:20:00 [INFO] src.sysmon_monitor: 心跳 (循环 160, last_record_id=4028)
+2026-06-14 16:20:05 [INFO] src.sysmon_monitor: 心跳 (循环 170, last_record_id=4028)
+2026-06-14 16:20:10 [INFO] src.sysmon_monitor: 心跳 (循环 180, last_record_id=4028)
+2026-06-14 16:20:15 [INFO] src.sysmon_monitor: 心跳 (循环 190, last_record_id=4028)
+2026-06-14 16:20:20 [INFO] src.sysmon_monitor: 心跳 (循环 200, last_record_id=4028)
+2026-06-14 16:20:25 [INFO] src.sysmon_monitor: 心跳 (循环 210, last_record_id=4028)
+2026-06-14 16:20:30 [INFO] src.sysmon_monitor: 心跳 (循环 220, last_record_id=4028)
+2026-06-14 16:20:35 [INFO] src.sysmon_monitor: 心跳 (循环 230, last_record_id=4028)
+2026-06-14 16:20:37 [INFO] src.scheduler: 正在扫描文件: C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\notepad.exe (来源: sysmon)
+2026-06-14 16:20:37 [INFO] src.scheduler: 扫描完成，未发现威胁: C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\notepad.exe
+2026-06-14 16:20:40 [INFO] src.sysmon_monitor: 心跳 (循环 240, last_record_id=4061)
+2026-06-14 16:20:45 [INFO] src.sysmon_monitor: 心跳 (循环 250, last_record_id=4061)
+2026-06-14 16:20:51 [INFO] src.sysmon_monitor: 心跳 (循环 260, last_record_id=4061)
+2026-06-14 16:20:56 [INFO] src.sysmon_monitor: 心跳 (循环 270, last_record_id=4061)
+2026-06-14 16:21:01 [INFO] src.sysmon_monitor: 心跳 (循环 280, last_record_id=4061)
+2026-06-14 16:21:06 [INFO] src.sysmon_monitor: 心跳 (循环 290, last_record_id=4061)
+2026-06-14 16:21:11 [INFO] src.sysmon_monitor: 心跳 (循环 300, last_record_id=4061)
+2026-06-14 16:21:16 [INFO] src.sysmon_monitor: 心跳 (循环 310, last_record_id=4061)
+2026-06-14 16:21:21 [INFO] src.sysmon_monitor: 心跳 (循环 320, last_record_id=4061)
+2026-06-14 16:21:26 [INFO] src.sysmon_monitor: 心跳 (循环 330, last_record_id=4061)
+2026-06-14 16:21:31 [INFO] src.sysmon_monitor: 心跳 (循环 340, last_record_id=4061)
+2026-06-14 16:21:36 [INFO] src.sysmon_monitor: 心跳 (循环 350, last_record_id=4061)
+2026-06-14 16:21:41 [INFO] src.sysmon_monitor: 心跳 (循环 360, last_record_id=4061)
+2026-06-14 16:21:47 [INFO] src.sysmon_monitor: 心跳 (循环 370, last_record_id=4061)
+2026-06-14 16:21:52 [INFO] src.sysmon_monitor: 心跳 (循环 380, last_record_id=4061)
+2026-06-14 16:21:57 [INFO] src.sysmon_monitor: 心跳 (循环 390, last_record_id=4061)
+2026-06-14 16:22:02 [INFO] src.sysmon_monitor: 心跳 (循环 400, last_record_id=4061)
+2026-06-14 16:22:07 [INFO] src.sysmon_monitor: 心跳 (循环 410, last_record_id=4061)
+2026-06-14 16:22:12 [INFO] src.sysmon_monitor: 心跳 (循环 420, last_record_id=4061)
+2026-06-14 16:22:17 [INFO] src.sysmon_monitor: 心跳 (循环 430, last_record_id=4061)
+2026-06-14 16:22:18 [INFO] src.scheduler: 正在扫描文件: C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\notepad.exe (来源: sysmon)
+2026-06-14 16:22:18 [INFO] src.scheduler: 扫描完成，未发现威胁: C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\notepad.exe
+2026-06-14 16:22:22 [INFO] src.sysmon_monitor: 心跳 (循环 440, last_record_id=4103)
+2026-06-14 16:22:27 [INFO] src.sysmon_monitor: 心跳 (循环 450, last_record_id=4103)
+2026-06-14 16:22:30 [INFO] src.scheduler: 正在扫描文件: C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\notepad.txt (来源: sysmon)
+2026-06-14 16:22:30 [INFO] src.scheduler: 扫描完成，未发现威胁: C:\Users\m1776\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\notepad.txt
+2026-06-14 16:22:32 [INFO] src.sysmon_monitor: 心跳 (循环 460, last_record_id=4115)
+2026-06-14 16:22:38 [INFO] src.sysmon_monitor: 心跳 (循环 470, last_record_id=4115)
+2026-06-14 16:22:43 [INFO] src.sysmon_monitor: 心跳 (循环 480, last_record_id=4115)
+2026-06-14 16:22:48 [INFO] src.sysmon_monitor: 心跳 (循环 490, last_record_id=4115)
+2026-06-14 16:49:24 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 16:49:24 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 16:49:24 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 16:49:40 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 16:49:40 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 16:49:41 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 16:49:42 [INFO] src.clamav_scanner: 成功连接到 ClamAV 守护进程 (127.0.0.1:3310)
+2026-06-14 16:49:43 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:50:01 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:50:03 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 16:52:47 [ERROR] src.clamav_scanner: 无法连接到 ClamAV 守护进程: Could not reach clamd using network (127.0.0.1, 3310)
+2026-06-14 16:52:48 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:52:58 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 16:52:58 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 16:52:58 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 16:52:59 [INFO] src.clamav_scanner: 成功连接到 ClamAV 守护进程 (127.0.0.1:3310)
+2026-06-14 16:53:00 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 16:53:03 [INFO] src.clamav_scanner: 成功连接到 ClamAV 守护进程 (127.0.0.1:3310)
+2026-06-14 16:53:04 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 17:01:43 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 17:01:43 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 17:01:43 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 17:02:08 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 17:02:08 [INFO] src.clamav_scanner: 成功连接到 ClamAV 守护进程 (127.0.0.1:3310)
+2026-06-14 17:02:08 [ERROR] src.clamav_scanner: 扫描目录 E:\C++\xx\test\testyy\ 时发生错误: Wrong type for [file], should be a string [was <class 'list'>]
+2026-06-14 17:05:16 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 17:05:16 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 17:05:16 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 17:05:20 [INFO] src.clamav_scanner: 成功连接到 ClamAV 守护进程 (127.0.0.1:3310)
+2026-06-14 17:05:20 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 17:06:26 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 17:06:26 [INFO] src.clamav_scanner: 成功连接到 ClamAV 守护进程 (127.0.0.1:3310)
+2026-06-14 17:07:05 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 17:07:05 [INFO] src.clamav_scanner: 成功连接到 ClamAV 守护进程 (127.0.0.1:3310)
+2026-06-14 17:07:05 [ERROR] src.yara_scanner: YARA 扫描文件 E:\Virse\VBS\Windows XP Horror无害版.exe 时出错: could not open file "E:\Virse\VBS\Windows XP Horror无害版.exe"
+2026-06-14 17:07:05 [ERROR] src.yara_scanner: YARA 扫描文件 E:\Virse\VBS\黑人抬棺.exe 时出错: could not open file "E:\Virse\VBS\黑人抬棺.exe"
+2026-06-14 17:07:05 [INFO] src.clamav_scanner: ClamAV 发现病毒: E:\Virse\VBS\main.vbs -> Win.Worm.Bingd-1
+2026-06-14 17:07:05 [INFO] src.clamav_scanner: ClamAV 发现病毒: E:\Virse\VBS\reset.vbs -> Html.Trojan.VBSFrekru-1
+2026-06-14 17:07:05 [INFO] src.clamav_scanner: ClamAV 发现病毒: E:\Virse\VBS\Viagra.zip -> Win.Joke.ViagRa-2
+2026-06-14 17:07:37 [INFO] src.clamav_scanner: ClamAV 发现病毒: E:\Virse\VBS\黑人抬棺.exe -> Win.Malware.Diskwriter-6914536-0
+2026-06-14 17:07:48 [INFO] root: 文件已隔离: E:\Virse\VBS\reset.vbs -> ./quarantine\reset_20260614_170748.vbs
+2026-06-14 17:07:48 [INFO] root: 文件已隔离: E:\Virse\VBS\黑人抬棺.exe -> ./quarantine\黑人抬棺_20260614_170748.exe
+2026-06-14 17:07:48 [INFO] root: 文件已隔离: E:\Virse\VBS\main.vbs -> ./quarantine\main_20260614_170748.vbs
+2026-06-14 17:07:48 [INFO] root: 文件已隔离: E:\Virse\VBS\Viagra.zip -> ./quarantine\Viagra_20260614_170748.zip
+2026-06-14 17:09:07 [INFO] root: 日志系统已初始化 (级别=INFO)
+2026-06-14 17:09:07 [INFO] root: 日志文件: logs\avengine.log
+2026-06-14 17:09:07 [INFO] root: 成功加载配置文件: config.yaml
+2026-06-14 17:09:33 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 17:09:33 [INFO] src.clamav_scanner: 成功连接到 ClamAV 守护进程 (127.0.0.1:3310)
+2026-06-14 17:09:34 [INFO] src.clamav_scanner: ClamAV 发现病毒: E:\Virse\VBS\main.vbs -> Win.Worm.Bingd-1
+2026-06-14 17:09:34 [INFO] src.clamav_scanner: ClamAV 发现病毒: E:\Virse\VBS\reset.vbs -> Html.Trojan.VBSFrekru-1
+2026-06-14 17:09:34 [INFO] src.clamav_scanner: ClamAV 发现病毒: E:\Virse\VBS\Viagra.zip -> Win.Joke.ViagRa-2
+2026-06-14 17:09:48 [INFO] src.clamav_scanner: ClamAV 发现病毒: E:\Virse\VBS\黑人抬棺.exe -> Win.Malware.Diskwriter-6914536-0
+2026-06-14 17:09:53 [INFO] root: 文件已隔离: E:\Virse\VBS\main.vbs -> ./quarantine\main_20260614_170953.vbs
+2026-06-14 17:09:53 [INFO] root: 文件已隔离: E:\Virse\VBS\reset.vbs -> ./quarantine\reset_20260614_170953.vbs
+2026-06-14 17:09:53 [INFO] root: 文件已隔离: E:\Virse\VBS\黑人抬棺.exe -> ./quarantine\黑人抬棺_20260614_170953.exe
+2026-06-14 17:09:53 [INFO] root: 文件已隔离: E:\Virse\VBS\Viagra.zip -> ./quarantine\Viagra_20260614_170953.zip
+2026-06-14 17:10:24 [INFO] src.yara_scanner: 成功编译 735 个规则文件
+2026-06-14 17:10:24 [INFO] src.clamav_scanner: 成功连接到 ClamAV 守护进程 (127.0.0.1:3310)
+2026-06-14 17:10:24 [INFO] src.scheduler: 调度器初始化完成 | YARA: 可用 | ClamAV: 可用 | Sysmon: 可用 | 定时扫描: 未启用
+2026-06-14 17:10:24 [INFO] src.scheduler: 扫描工作线程已启动
+2026-06-14 17:10:24 [INFO] src.scheduler: Sysmon 实时监控线程已启动
+2026-06-14 17:10:24 [INFO] src.sysmon_monitor: 查询: *[System[EventID=2 or EventID=11]]
+2026-06-14 17:10:24 [INFO] src.sysmon_monitor: Sysmon 监控已启动 (通道: Microsoft-Windows-Sysmon/Operational)
+2026-06-14 17:10:24 [INFO] src.scheduler: 正在扫描文件: E:\Virse\VBS Maker.exe (来源: sysmon)
+2026-06-14 17:10:24 [INFO] src.clamav_scanner: ClamAV 发现病毒: E:\Virse\VBS Maker.exe -> Win.Trojan.C-264
+2026-06-14 17:10:24 [WARNING] src.scheduler: 检测到威胁: E:\Virse\VBS Maker.exe -> ClamAV: Win.Trojan.C-264
+2026-06-14 17:10:24 [INFO] root: 文件已隔离: E:\Virse\VBS Maker.exe -> ./quarantine\VBS Maker_20260614_171024.exe
+2026-06-14 17:10:28 [INFO] src.sysmon_monitor: 心跳 (循环 10, last_record_id=6221)
+2026-06-14 17:10:33 [INFO] src.scheduler: 正在扫描文件: C:\Users\m1776\AppData\Local\Temp\7zE46975D4F\黑人抬棺.exe (来源: sysmon)
+2026-06-14 17:10:34 [INFO] src.sysmon_monitor: 心跳 (循环 20, last_record_id=6261)
+2026-06-14 17:10:34 [ERROR] root: 计算哈希失败: 文件不存在 C:\Users\m1776\AppData\Local\Temp\7zE46975D4F\黑人抬棺.exe
+2026-06-14 17:10:34 [INFO] src.scheduler: 扫描完成，未发现威胁: C:\Users\m1776\AppData\Local\Temp\7zE46975D4F\黑人抬棺.exe
+2026-06-14 17:10:34 [INFO] src.scheduler: 正在扫描文件: E:\Virse\VBS\黑人抬棺.exe (来源: sysmon)
+2026-06-14 17:10:39 [INFO] src.sysmon_monitor: 心跳 (循环 30, last_record_id=6265)
+2026-06-14 17:10:44 [INFO] src.sysmon_monitor: 心跳 (循环 40, last_record_id=6265)
+2026-06-14 17:10:48 [INFO] src.clamav_scanner: ClamAV 发现病毒: E:\Virse\VBS\黑人抬棺.exe -> Win.Malware.Diskwriter-6914536-0
+2026-06-14 17:10:48 [WARNING] src.scheduler: 检测到威胁: E:\Virse\VBS\黑人抬棺.exe -> ClamAV: Win.Malware.Diskwriter-6914536-0
+2026-06-14 17:10:48 [INFO] root: 文件已隔离: E:\Virse\VBS\黑人抬棺.exe -> ./quarantine\黑人抬棺_20260614_171048.exe
+2026-06-14 17:10:49 [INFO] src.sysmon_monitor: 心跳 (循环 50, last_record_id=6265)
+2026-06-14 17:10:54 [INFO] src.sysmon_monitor: 心跳 (循环 60, last_record_id=6265)
+2026-06-14 17:10:59 [INFO] src.sysmon_monitor: 心跳 (循环 70, last_record_id=6265)
+2026-06-14 17:11:04 [INFO] src.sysmon_monitor: 心跳 (循环 80, last_record_id=6265)
+2026-06-14 17:11:09 [INFO] src.sysmon_monitor: 心跳 (循环 90, last_record_id=6265)
+2026-06-14 17:11:14 [INFO] src.sysmon_monitor: 心跳 (循环 100, last_record_id=6265)
+2026-06-14 17:11:16 [INFO] src.scheduler: 正在停止调度器...
+2026-06-14 17:11:16 [INFO] src.sysmon_monitor: 正在停止 Sysmon 监控...
+2026-06-14 17:11:16 [INFO] src.sysmon_monitor: Sysmon 监控已停止
+2026-06-14 17:11:16 [INFO] src.scheduler: 调度器已停止
