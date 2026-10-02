@@ -62,6 +62,12 @@ echo [6/6] runtime check:
 echo --------------------------------------------
 "avengine.exe" status
 echo.
+echo ClamAV on Windows 7:
+echo   ClamAV 1.x is not supported on Windows 7. AvEngine talks to clamd over TCP only.
+echo   * YARA only (no ClamAV):  scripts\set_clamav.ps1 -ClamdHost none
+echo   * clamd on the LAN:       scripts\set_clamav.ps1 -ClamdHost ^<ip^>
+echo   Then re-run: avengine.exe status
+echo.
 echo Deployment check finished.
 echo   Next: "avengine.exe scan C:\path\to\sample"  or  "avengine.exe" for the menu.
 

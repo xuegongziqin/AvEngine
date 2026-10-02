@@ -41,9 +41,11 @@ AntierX/
 
 ## 环境要求
 
-- Windows 10/11，Python 3.8+
+- **Windows 10/11**：全功能（YARA + 本机 ClamAV + Sysmon）
+- **Windows 7 SP1**：YARA + Sysmon；ClamAV 1.x 不支持 Win7，请改用「局域网 clamd」或「纯 YARA」（见下）
+- Python 3.8+（源码方式运行需要）
 - 管理员权限（实时监控、Sysmon 安装需要）
-- 可选：ClamAV for Windows（`bina/clamav.msi`）
+- 可选：ClamAV for Windows（`bina/clamav.msi`，仅 Win10/11）
 
 ## 安装
 
@@ -96,6 +98,17 @@ pip install -e .                       # 可选：安装为包，提供 avengine
 ```powershell
 .\scripts\install.bat
 ```
+
+### Windows 7 部署（ClamAV 可选）
+
+ClamAV 1.x 的官方 Windows 安装包面向 Windows 10+，在 Win7 上无法正常运行。AvEngine 的 ClamAV 只是一个 **clamd TCP 客户端**（读取 `config.yaml` 的 `clamav.host` / `port`），因此 Win7 上有两种选择：
+
+| 方案 | 操作 | 结果 |
+| ---- | ---- | ---- |
+| **局域网 clamd** | 在另一台受支持主机（Win10/11、Linux，或 `clamav/clamav` Docker 镜像）安装并启动 clamd，放开 3310 端口；在 Win7 运行 `.\scripts\set_clamav.ps1 -ClamdHost <clamd的IP>` | `status` 显示 ClamAV 可用 + 版本号 |
+| **纯 YARA** | 运行 `.\scripts\set_clamav.ps1 -ClamdHost none`（等价于把 `clamav.host` 置空） | `status` 显示 ClamAV 不可用，`scan` 仍用 YARA + Sysmon 正常工作 |
+
+`.\scripts\install.bat` 会自动识别 Win7 并询问选择哪种方式，本机不安装 ClamAV。局域网 clamd 无认证，请用防火墙限制 3310 端口仅对可信网段开放。
 
 ## 使用指南
 
@@ -175,7 +188,7 @@ echo n | .\venv\Scripts\python.exe -m avengine scan C:\dangerous   # 仅报告
 
 | 字段 | 正常值 | 异常处理 |
 | ---- | ------ | -------- |
-| ClamAV 连接 | 可用 + 版本号 | 服务未启动 → 运行 `scripts\start_clamav.bat` |
+| ClamAV 连接 | 可用 + 版本号 | 服务未启动 → 运行 `scripts\start_clamav.bat`；Win7 请改用局域网 clamd 或纯 YARA（见「Windows 7 部署」） |
 | YARA 规则 | 已加载（N 个规则文件） | 未加载 → 检查 `yara.rules_path` 与 `rules/` 目录 |
 | Sysmon | 可用（已安装） | 执行一次 `monitor` 会自动安装 |
 | 隔离目录 / 监控路径 | 与配置一致 | 见下方配置说明 |
@@ -244,7 +257,7 @@ copy config.ini.example config.ini     # 1. 生成配置并填写 base_url / mod
 | 配置段 | 字段 | 说明 |
 | ------ | ---- | ---- |
 | `yara` | `rules_path` | YARA 规则目录，递归加载 `.yar` / `.yara` |
-| `clamav` | `host` / `port` / `timeout` | clamd 连接，默认 `127.0.0.1:3310` |
+| `clamav` | `host` / `port` / `timeout` | clamd 连接，默认 `127.0.0.1:3310`；可指向局域网 clamd（如 `192.168.1.50`），`host` 置空则禁用 ClamAV（纯 YARA） |
 | `sysmon` | `channel` | Sysmon 事件通道 |
 | `quarantine` | `path` | 检出后的隔离目录 |
 | `scan` | `on_access` | 实时监控开关（由 Sysmon 文件事件触发） |
