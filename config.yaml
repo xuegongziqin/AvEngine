@@ -1,4 +1,7 @@
-﻿yara:
+﻿# AvEngine 配置文件
+# 结构说明见 config.example.yaml；相对路径均基于项目根目录解析。
+
+yara:
   rules_path: "./rules"
 
 clamav:
@@ -13,33 +16,9 @@ quarantine:
   path: "./quarantine"
 
 scan:
-  on_access: true       # 鏄惁鍚敤瀹炴椂鏂囦欢鐩戞帶
+  on_access: true          # 是否启用实时文件监控（Sysmon 事件触发扫描）
+  timer_enabled: false     # 是否启用定时批量扫描
+  timer_interval: 3600     # 定时扫描间隔（秒）
   monitor_paths:
     - "C:\\Users\\Public"
     - "C:\\Temp"
-
-
-
-clamav:
-  host: "127.0.0.1"
-  port: 3310
-  timeout: 30
-
-
-clamav:
-  host: "127.0.0.1"
-  port: 3310
-  timeout: 30
-
-
-clamav:
-  host: "127.0.0.1"
-  port: 3310
-  timeout: 30
-
-
-clamav:
-  host: "127.0.0.1"
-  port: 3310
-  timeout: 30
-

@@ -1,0 +1,29 @@
+# AvEngine 配置示例（缺失 config.yaml 时会据此生成）
+# 所有相对路径均基于项目根目录解析，与当前工作目录无关。
+
+# YARA 规则目录（递归加载 .yar / .yara 文件）
+yara:
+  rules_path: "./rules"
+
+# clamd 守护进程连接信息
+clamav:
+  host: "127.0.0.1"
+  port: 3310
+  timeout: 30
+
+# Sysmon 事件通道
+sysmon:
+  channel: "Microsoft-Windows-Sysmon/Operational"
+
+# 检出威胁后的隔离目录
+quarantine:
+  path: "./quarantine"
+
+# 扫描行为
+scan:
+  on_access: true          # 实时监控：由 Sysmon 文件事件触发扫描
+  timer_enabled: false     # 定时批量扫描开关
+  timer_interval: 3600     # 定时扫描间隔（秒）
+  monitor_paths:           # 定时扫描 / 实时监控关注的目录
+    - "C:\\Users\\Public"
+    - "C:\\Temp"

@@ -1,0 +1,47 @@
+# This workflow assembles all Yara rules into a single file
+
+name: Assemble Yara
+
+on:
+  push:
+    branches:
+      - master
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checks-out the repository under $GITHUB_WORKSPACE
+      - name: Check-out the repository
+        uses: actions/checkout@v2
+
+      # Assemble all *.yar files (except those requiring external variables)
+      - name: Assemble all Yara files
+        run: |
+          mapfile -t excluded_rules < <(grep -E -v '^\s*(#|$)' "$GITHUB_WORKSPACE/yara/external-variable-rules.txt")
+
+          for f in "$GITHUB_WORKSPACE"/yara/*.yar; do
+            skip_rule=false
+
+            for excluded_rule in "${excluded_rules[@]}"; do
+              if [[ "${f##*/}" == "${excluded_rule}" ]]; then
+                skip_rule=true
+                break
+              fi
+            done
+
+            if [[ "${skip_rule}" == false ]]; then
+              cat "$f" >> signature-base.yar
+            fi
+          done
+
+      # Upload the resulting Yara artifact
+      - name: Upload the resulting Yara artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: signature-base.yar
+          path: signature-base.yar

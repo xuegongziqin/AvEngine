@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "avengine"
+version = "0.1.0"
+description = "AvEngine - 基于 YARA + ClamAV + Sysmon 的多引擎杀毒引擎"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "colorama>=0.4.6",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+avengine = "avengine.cli:main"
+
+[tool.setuptools]
+packages = ["avengine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
