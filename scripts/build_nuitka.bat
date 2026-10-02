@@ -33,6 +33,8 @@ echo [Nuitka] compiler=%COMPILER%
   --standalone ^
   %COMPFLAG% ^
   --assume-yes-for-downloads ^
+  --show-memory ^
+  --verbose ^
   --include-package=avengine ^
   --include-data-files="%DLL%=avengine/_native/avengine_core.dll" ^
   --include-data-files="%ROOT%\config.example.yaml=config.example.yaml" ^

@@ -34,6 +34,9 @@ dist/
 *.build/
 nuitka-crash-report.xml
 
+# ---- 一键构建输出（拷走即用的发布目录）----
+releases/
+
 # ---- 编辑器 / IDE ----
 .idea/
 .vscode/
