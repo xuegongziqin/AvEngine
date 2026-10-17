@@ -512,6 +512,24 @@ scripts\install.bat
 
 ## 9. 构建（维护者）
 
+### 9.0 先自备第三方二进制（不在仓库里）
+
+仓库只含**自己的代码**；下面这些第三方产物因为体积/许可证原因**不入库**，需要自己放进 `bina\`：
+
+| 路径 | 内容 | 从哪里来 |
+| ---- | ---- | -------- |
+| `bina\clamav.msi` | 现代版 ClamAV 1.x（Win8.1+） | <https://www.clamav.net/downloads> |
+| `bina\clamwin7\*.msi` | 最后支持 Win7 SP1 的 ClamAV | 同上（旧版本），文件名任意 `*.msi` |
+| `bina\Sysmon\Sysmon64.exe` | Sysmon 15.x（Win8.1+） | <https://learn.microsoft.com/sysinternals/downloads/sysmon> |
+| `bina\Sysmon\sysmonwin7\Sysmon64.exe` | Sysmon 13.x（Win7/2008 R2） | 同上（旧版本） |
+
+缺 `bina\` 也能构建出 `avengine.exe` 与 `avengine_core.dll`（内核 + 外壳自包含），只是发布包里
+没有 Sysmon/ClamAV 安装包，`install.bat` 的第 3 步会退化为「局域网 clamd / 纯 YARA」。
+`third_party\`（libyara 源码与预编译库）同样不入库，首次构建前按 `cpp\CMakeLists.txt` 的说明准备。
+
+> 密钥类文件**永远不会入库**：`service\passwd.txt`、`service\signing.json`、`service\generated\`、
+> `bina\signing\`、`config.ini`（含 API key）、`config.yaml.bak-*` 均已在 `.gitignore` 中。
+
 ### 9.1 环境
 
 - Windows 10/11
