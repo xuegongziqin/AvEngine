@@ -11,6 +11,29 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+
+@pytest.fixture(autouse=True)
+def _never_call_the_real_ai(monkeypatch):
+    """
+    测试绝不真的调用 AI。
+
+    为什么必须这样：项目根下的 `config.ini` 是**操作员真实的配置**（带 API key 与
+    base_url），而 CLI 的 `scan` 在检出威胁后会调用 `_ai_detection_analysis()` 把检测结果
+    交给模型。后果有两个，都是真事：
+
+      * 又慢又花钱，还会随网络/模型行为抖动 —— 一次全量跑里
+        `test_cmd_scan_detects_threat` 就偶发失败过：模型真的调用了 `quarantine_file` 工具，
+        在测试的隔离目录里留下文件，于是"用户选择不隔离"的断言失败。
+      * 测试结果取决于操作员的私有配置，别人机器上跑不出同样结论。
+
+    需要 AI 的测试自己准备假数据（见 test_ai_core.py / test_ai_stream.py 的假 DLL 与 fixture）。
+    """
+    try:
+        import avengine.cli as cli
+    except Exception:  # noqa: BLE001 - 环境缺依赖时不影响其它测试
+        return
+    monkeypatch.setattr(cli, "_ai_detection_analysis", lambda *a, **k: None, raising=False)
+
 TEST_RULE = """
 rule AntierX_Test
 {

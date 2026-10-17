@@ -17,6 +17,9 @@ public:
     // 返回命中的规则标识符列表
     std::vector<std::string> scan_file(const std::string& path) const;
 
+    // 扫描内存块（内存区域扫描 / 无文件恶意代码检测用），返回命中的规则标识符列表
+    std::vector<std::string> scan_memory(const unsigned char* data, size_t len) const;
+
 private:
     void* rules_ = nullptr;
     bool available_ = false;

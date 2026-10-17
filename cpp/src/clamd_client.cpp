@@ -1,5 +1,6 @@
 // clamd_client.cpp - clamd TCP 客户端（Windows Winsock）
 #include "clamd_client.h"
+#include "ai/ai_util.h"   // aiutil::to_wide_path：非 ASCII 路径支持
 
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
@@ -167,7 +168,10 @@ ClamScanResult ClamdClient::scan_file(const std::string& path) const {
     ClamScanResult r;
     std::string err;
 
-    std::ifstream in(path, std::ios::binary);
+    // 窄 ifstream 在 Windows 上按 ANSI 代码页解释路径：中文文件名会打开失败，
+    // 于是表现成"ClamAV 扫不了"而不是"文件有问题"。
+    // 用 C++17 标准的 fs::path 重载（Windows 上 path 内部就是宽字符，走宽字符 open）。
+    std::ifstream in(std::filesystem::path(aiutil::to_wide_path(path)), std::ios::binary);
     if (!in) {
         r.error = "无法打开文件: " + path;
         return r;

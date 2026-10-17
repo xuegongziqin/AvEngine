@@ -1,6 +1,7 @@
 // sha256.cpp - 基于 Windows CNG(BCrypt) 的文件哈希实现
 #include "sha256.h"
 #include "util.h"
+#include "ai/ai_util.h"   // aiutil::to_wide_path：非 ASCII 路径支持
 
 #include <windows.h>
 #include <bcrypt.h>
@@ -41,7 +42,9 @@ std::string sha256_file(const std::string& path, std::string& err) {
         return "";
     }
 
-    std::FILE* fp = std::fopen(path.c_str(), "rb");
+    // 路径来自内核的 UTF-8 字符串：std::fopen 在 Windows 上按 ANSI 代码页解码，
+    // 中文/日文文件名会打不开（表现是"无法打开文件"且 sha256 为空）。
+    std::FILE* fp = _wfopen(aiutil::to_wide_path(path).c_str(), L"rb");
     if (!fp) {
         BCryptDestroyHash(hash);
         BCryptCloseAlgorithmProvider(alg, 0);

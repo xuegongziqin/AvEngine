@@ -133,10 +133,13 @@ void push_event(const std::string& json) {
 bool quarantine_move(const std::string& src, const std::string& dir, std::string& out,
                      std::string& err) {
     std::error_code ec;
-    fs::create_directories(dir, ec);
-    fs::path s(src);
-    std::string stem = s.stem().string();
-    std::string ext = s.extension().string();
+    // 路径都是 UTF-8，必须转宽字符再进 std::filesystem：从 char* 构造 fs::path
+    // 在 Windows 上按 ANSI 代码页解码，中文/日文文件名会变成乱码（隔离直接失败）。
+    const fs::path s(utf8_to_wide_path(src));
+    const fs::path dest_dir(utf8_to_wide_path(dir));
+    fs::create_directories(dest_dir, ec);
+    std::string stem = wide_to_utf8(s.stem().wstring());
+    std::string ext = wide_to_utf8(s.extension().wstring());
 
     char ts[32];
     std::time_t t = std::time(nullptr);
@@ -144,10 +147,11 @@ bool quarantine_move(const std::string& src, const std::string& dir, std::string
     localtime_s(&tmv, &t);
     std::strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", &tmv);
 
-    fs::path dest = fs::path(dir) / (stem + "_" + ts + ext);
+    fs::path dest = dest_dir / utf8_to_wide_path(stem + "_" + ts + ext);
     int counter = 1;
     while (fs::exists(dest, ec)) {
-        dest = fs::path(dir) / (stem + "_" + ts + "_(" + std::to_string(counter) + ")" + ext);
+        dest = dest_dir / utf8_to_wide_path(stem + "_" + ts +
+                                            "_(" + std::to_string(counter) + ")" + ext);
         ++counter;
     }
 
@@ -161,7 +165,7 @@ bool quarantine_move(const std::string& src, const std::string& dir, std::string
         }
         fs::remove(s, ec);
     }
-    out = dest.string();
+    out = wide_to_utf8(dest.wstring());   // 对外一律 UTF-8
     return true;
 }
 
@@ -248,7 +252,9 @@ void sysmon_loop() {
                     last_id = rid;
                     if (extract_named_data(xml, "TargetFilename", target) && !target.empty()) {
                         std::error_code ec;
-                        if (fs::is_regular_file(target, ec)) {
+                        // Sysmon 事件里的 TargetFilename 是 UTF-8（我们按 UTF-8 解 XML），
+                        // 中文路径必须转宽字符再判断，否则"文件存在"永远为假、实时扫描静默漏掉。
+                        if (fs::is_regular_file(fs::path(utf8_to_wide_path(target)), ec)) {
                             scan_and_handle(target, yara, use_clam, clam);
                         }
                     }
@@ -274,12 +280,15 @@ void timer_loop() {
         for (const std::string& dir : g.cfg.monitor_paths) {
             if (g.stop.load()) break;
             std::error_code ec;
-            if (!fs::is_directory(dir, ec)) continue;
-            for (auto it = fs::recursive_directory_iterator(dir, ec);
+            // 监控目录来自 config.yaml（UTF-8）：中文目录要先转宽字符，
+            // 否则 is_directory 判否 -> 整个目录被静默跳过，一个文件都不扫。
+            const fs::path dir_path(utf8_to_wide_path(dir));
+            if (!fs::is_directory(dir_path, ec)) continue;
+            for (auto it = fs::recursive_directory_iterator(dir_path, ec);
                  it != fs::recursive_directory_iterator(); it.increment(ec)) {
                 if (ec || g.stop.load()) break;
                 if (!it->is_regular_file(ec)) continue;
-                scan_and_handle(it->path().string(), yara, use_clam, clam);
+                scan_and_handle(wide_to_utf8(it->path().wstring()), yara, use_clam, clam);
             }
         }
     }

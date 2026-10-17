@@ -1,5 +1,13 @@
 // ai_tools.cpp - AI 工具库实现（Win32 原生）
+// winsock2.h 必须先于任何会引入 windows.h 的头文件（ai_util.h 就会引入），
+// 否则 MinGW 报 "#warning Please include winsock2.h before windows.h"。
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+
 #include "ai_tools.h"
+#include "ai_tools_ext.h"
 
 #include "ai_collectors.h"
 #include "ai_util.h"
@@ -7,16 +15,14 @@
 #include "util.h"
 #include "yara_engine.h"
 
-#define WIN32_LEAN_AND_MEAN
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
 #include <bcrypt.h>
 #include <iphlpapi.h>
 #include <psapi.h>
+#include <softpub.h>
 #include <tlhelp32.h>
 #include <winsvc.h>
 #include <winreg.h>
+#include <wintrust.h>
 
 #include <algorithm>
 #include <cctype>
@@ -39,11 +45,40 @@ namespace {
 
 std::string ERR(const std::string& m) { return "ERROR: " + m; }
 
-std::string base_name(const std::string& p) { return fs::path(p).filename().string(); }
+std::string base_name(const std::string& p) {
+    // 路径是 UTF-8：先转宽字符再取文件名，最后转回 UTF-8，中文名不会变乱码
+    return aiutil::to_utf8(fs::path(aiutil::to_wide_path(p)).filename().wstring());
+}
 
 std::string lower(std::string s) {
     for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     return s;
+}
+
+// 安全取参：模型偶尔会把数字写成字符串、把字符串写成数字，value<T>() 会抛异常
+long long safe_int(const json& a, const char* key, long long def) {
+    auto it = a.find(key);
+    if (it == a.end() || it->is_null()) return def;
+    if (it->is_number_integer()) return it->get<long long>();
+    if (it->is_number_float()) return static_cast<long long>(it->get<double>());
+    if (it->is_boolean()) return it->get<bool>() ? 1 : 0;
+    if (it->is_string()) {
+        try {
+            return std::stoll(it->get<std::string>());
+        } catch (...) {
+            return def;
+        }
+    }
+    return def;
+}
+
+std::string safe_str(const json& a, const char* key, const std::string& def = "") {
+    auto it = a.find(key);
+    if (it == a.end() || it->is_null()) return def;
+    if (it->is_string()) return it->get<std::string>();
+    if (it->is_boolean()) return it->get<bool>() ? "true" : "false";
+    if (it->is_number_integer()) return std::to_string(it->get<long long>());
+    return def;
 }
 
 std::string now_iso() {
@@ -151,16 +186,31 @@ unsigned long long process_rss(DWORD pid) {
     return rss;
 }
 
-std::string run_capture(const std::string& cmd) {
-    std::FILE* p = _popen(cmd.c_str(), "r");
-    if (!p) return "";
-    std::string out;
-    char buf[4096];
-    size_t n;
-    while ((n = std::fread(buf, 1, sizeof(buf), p)) > 0) out.append(buf, n);
-    _pclose(p);
-    return out;
+// 轻量 Authenticode 校验（无 UI、不查吊销，够快），用于"只看无签名模块"过滤
+bool quick_is_signed(const std::string& path_utf8) {
+    std::wstring wpath = to_wide_sys(path_utf8);
+    WINTRUST_FILE_INFO file_info{};
+    file_info.cbStruct = sizeof(file_info);
+    file_info.pcwszFilePath = wpath.c_str();
+
+    GUID action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    WINTRUST_DATA data{};
+    data.cbStruct = sizeof(data);
+    data.dwUIChoice = WTD_UI_NONE;
+    data.fdwRevocationChecks = WTD_REVOKE_NONE;
+    data.dwUnionChoice = WTD_CHOICE_FILE;
+    data.dwStateAction = WTD_STATEACTION_VERIFY;
+    data.pFile = &file_info;
+
+    LONG rc = WinVerifyTrust(static_cast<HWND>(INVALID_HANDLE_VALUE), &action, &data);
+    data.dwStateAction = WTD_STATEACTION_CLOSE;   // 释放状态数据
+    WinVerifyTrust(static_cast<HWND>(INVALID_HANDLE_VALUE), &action, &data);
+    return rc == 0;
 }
+
+// 说明：这里曾有一个基于 _popen 的 run_capture（无超时、无错误上报、ANSI 编码，
+// 子命令失败还会被静默吞掉）。需要执行外部命令的工具统一改用
+// aiext::run_capture()（CreateProcessW + 超时 + 错误回报 + 编码自适应）。
 
 // ---------------- 进程 ----------------
 
@@ -223,23 +273,48 @@ std::string t_get_process_info(const json& a, AiContext&) {
 
 std::string t_list_process_modules(const json& a, AiContext&) {
     DWORD pid = a.value("pid", 0);
-    int limit = std::min(a.value("limit", 200), 1000);
+    int limit = std::min(std::max(a.value("limit", 200), 1), 1000);
+    int offset = std::min(std::max(a.value("offset", 0), 0), 900);
+    // filter: all | unsigned（只看无签名模块，识别注入/未签名 DLL）
+    std::string filter = lower(a.value("filter", "all"));
+
     HANDLE h = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
     if (!h) return ERR("拒绝访问 PID=" + std::to_string(pid));
-    HMODULE mods[1024];
+    std::vector<HMODULE> mods(1024);
     DWORD needed = 0;
     json out = json::array();
-    if (EnumProcessModulesEx(h, mods, sizeof(mods), &needed, LIST_MODULES_ALL)) {
-        int count = static_cast<int>(needed / sizeof(HMODULE));
-        for (int i = 0; i < count && static_cast<int>(out.size()) < limit; ++i) {
+    int total = 0;
+    bool truncated = false;
+    if (EnumProcessModulesEx(h, mods.data(), static_cast<DWORD>(mods.size() * sizeof(HMODULE)),
+                             &needed, LIST_MODULES_ALL)) {
+        total = static_cast<int>(needed / sizeof(HMODULE));
+        if (total > static_cast<int>(mods.size())) {   // 缓冲不够，扩容重试
+            mods.resize(static_cast<size_t>(total) + 64);
+            if (EnumProcessModulesEx(h, mods.data(),
+                                     static_cast<DWORD>(mods.size() * sizeof(HMODULE)),
+                                     &needed, LIST_MODULES_ALL))
+                total = static_cast<int>(needed / sizeof(HMODULE));
+        }
+        int sig_checked = 0;
+        for (int i = offset; i < total; ++i) {
             wchar_t path[MAX_PATH];
-            if (GetModuleFileNameExW(h, mods[i], path, MAX_PATH)) {
-                out.push_back(to_utf8(path));
+            if (!GetModuleFileNameExW(h, mods[i], path, MAX_PATH)) continue;
+            std::string mp = to_utf8(path);
+
+            if (filter == "unsigned") {
+                if (sig_checked >= 200) { truncated = true; break; }  // 签名校验预算
+                ++sig_checked;
+                if (quick_is_signed(mp)) continue;
             }
+            out.push_back(mp);
+            if (static_cast<int>(out.size()) >= limit) { truncated = (i + 1 < total); break; }
         }
     }
     CloseHandle(h);
-    return json{{"pid", pid}, {"modules_returned", out.size()}, {"modules", out}}.dump();
+    json result = {{"pid", pid}, {"total_modules", total}, {"offset", offset},
+                   {"modules_returned", out.size()}, {"truncated", truncated},
+                   {"modules", out}};
+    return aiutil::dump_json(result);
 }
 
 std::string t_dump_memory(const json& a, AiContext& ctx) {
@@ -251,19 +326,21 @@ std::string t_dump_memory(const json& a, AiContext& ctx) {
     if (!h) return ERR("OpenProcess 失败（需要管理员或进程已退出）");
 
     std::error_code ec;
-    fs::create_directories(ctx.dump_dir, ec);
+    // ctx.dump_dir 是 UTF-8 字符串；fs::path 直接收 char* 会按 ANSI 解码（中文用户名下必失败）
+    const fs::path dump_dir(aiutil::to_wide_path(ctx.dump_dir));
+    fs::create_directories(dump_dir, ec);
     char ts[32];
     std::time_t t = std::time(nullptr);
     std::tm tmv{};
     localtime_s(&tmv, &t);
     std::strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", &tmv);
-    fs::path out_path = fs::path(ctx.dump_dir) / ("pid" + std::to_string(pid) + "_" + ts + ".bin");
+    fs::path out_path = dump_dir / aiutil::to_wide_path("pid" + std::to_string(pid) + "_" + ts + ".bin");
 
     unsigned long long written = 0, max_bytes = static_cast<unsigned long long>(max_mb) * 1048576ULL;
     std::ofstream out(out_path, std::ios::binary);
     if (!out) {
         CloseHandle(h);
-        return ERR("无法创建转储文件: " + out_path.string());
+        return ERR("无法创建转储文件: " + aiutil::to_utf8(out_path.wstring()));
     }
 
     MEMORY_BASIC_INFORMATION mbi{};
@@ -300,7 +377,7 @@ std::string t_dump_memory(const json& a, AiContext& ctx) {
         fs::remove(out_path, rec);
         return ERR("没有读取到任何可读内存（进程可能已退出）");
     }
-    return json{{"path", out_path.string()},
+    return json{{"path", aiutil::to_utf8(out_path.wstring())},
                 {"bytes_written", written},
                 {"size_mb", static_cast<double>(written) / 1048576.0},
                 {"regions_read", regions},
@@ -471,13 +548,17 @@ std::string t_list_connections(const json& a, AiContext&) {
                 std::string st = states.count(r.dwState) ? states.at(r.dwState) : std::to_string(r.dwState);
                 if (!state_filter.empty() && st != state_filter) continue;
                 char la[32], ra[32];
-                std::snprintf(la, sizeof(la), "%u.%u.%u.%u:%u",
-                              r.dwLocalAddr & 0xff, (r.dwLocalAddr >> 8) & 0xff,
-                              (r.dwLocalAddr >> 16) & 0xff, (r.dwLocalAddr >> 24) & 0xff,
+                std::snprintf(la, sizeof(la), "%lu.%lu.%lu.%lu:%u",
+                              static_cast<unsigned long>(r.dwLocalAddr & 0xff),
+                              static_cast<unsigned long>((r.dwLocalAddr >> 8) & 0xff),
+                              static_cast<unsigned long>((r.dwLocalAddr >> 16) & 0xff),
+                              static_cast<unsigned long>((r.dwLocalAddr >> 24) & 0xff),
                               ntohs(static_cast<u_short>(r.dwLocalPort)));
-                std::snprintf(ra, sizeof(ra), "%u.%u.%u.%u:%u",
-                              r.dwRemoteAddr & 0xff, (r.dwRemoteAddr >> 8) & 0xff,
-                              (r.dwRemoteAddr >> 16) & 0xff, (r.dwRemoteAddr >> 24) & 0xff,
+                std::snprintf(ra, sizeof(ra), "%lu.%lu.%lu.%lu:%u",
+                              static_cast<unsigned long>(r.dwRemoteAddr & 0xff),
+                              static_cast<unsigned long>((r.dwRemoteAddr >> 8) & 0xff),
+                              static_cast<unsigned long>((r.dwRemoteAddr >> 16) & 0xff),
+                              static_cast<unsigned long>((r.dwRemoteAddr >> 24) & 0xff),
                               ntohs(static_cast<u_short>(r.dwRemotePort)));
                 rows.push_back({{"pid", r.dwOwningPid},
                                 {"process", process_name(r.dwOwningPid)},
@@ -613,29 +694,136 @@ std::string t_read_registry(const json& a, AiContext&) {
     return out.dump();
 }
 
-std::string t_list_scheduled_tasks(const json& a, AiContext&) {
-    std::string kw = lower(a.value("keyword", ""));
-    int limit = std::min(a.value("limit", 200), 1000);
-    std::string text = run_capture("schtasks /query /fo CSV /nh 2>nul");
+// 回退：schtasks 被策略/权限挡住时，直接枚举任务库目录
+// （%SystemRoot%\System32\Tasks 下每个 XML 文件就是一个任务，相对路径就是任务名）
+json list_tasks_from_store(int limit, const std::string& kw) {
     json tasks = json::array();
-    std::istringstream ss(text);
-    std::string line;
-    while (std::getline(ss, line) && static_cast<int>(tasks.size()) < limit) {
-        // CSV 第一列
-        std::string name;
-        if (!line.empty() && line[0] == '"') {
-            size_t end = line.find('"', 1);
-            name = line.substr(1, end == std::string::npos ? std::string::npos : end - 1);
-        } else {
-            size_t comma = line.find(',');
-            name = line.substr(0, comma);
-        }
-        while (!name.empty() && name.front() == '\\') name.erase(name.begin());
-        if (name.empty() || lower(name).rfind("info", 0) == 0) continue;
-        if (!kw.empty() && lower(name).find(kw) == std::string::npos) continue;
-        tasks.push_back(name);
+    wchar_t win[MAX_PATH]{};
+    if (!GetWindowsDirectoryW(win, MAX_PATH)) return tasks;
+    fs::path dir = fs::path(win) / L"System32" / L"Tasks";
+    std::error_code ec;
+    if (!fs::is_directory(dir, ec)) return tasks;
+    for (auto it = fs::recursive_directory_iterator(
+             dir, fs::directory_options::skip_permission_denied, ec);
+         it != fs::recursive_directory_iterator() && static_cast<int>(tasks.size()) < limit;
+         it.increment(ec)) {
+        if (ec) break;
+        std::error_code fec;
+        if (!it->is_regular_file(fec)) continue;
+        std::string rel = aiutil::to_utf8(fs::relative(it->path(), dir, fec).wstring());
+        if (fec || rel.empty()) continue;
+        std::replace(rel.begin(), rel.end(), '/', '\\');
+        if (!kw.empty() && lower(rel).find(kw) == std::string::npos) continue;
+        tasks.push_back(rel);
     }
-    return json{{"returned", tasks.size()}, {"tasks", tasks}}.dump();
+    return tasks;
+}
+
+std::string t_list_scheduled_tasks(const json& a, AiContext&) {
+    std::string kw = lower(safe_str(a, "keyword"));
+    int limit = static_cast<int>(std::min<long long>(std::max<long long>(safe_int(a, "limit", 200), 1), 1000));
+
+    // 用 aiext::run_capture：有超时、失败会返回 ERROR（旧实现用 _popen，schtasks 一旦失败
+    // 错误被 2>nul 吞掉，工具就静默返回 0 条），并按 OEM 代码页转成 UTF-8，
+    // 中文系统上的任务名不会变乱码。
+    //
+    // 注意 /NH：部分系统（实测 Windows 7 中文版）会报
+    // "错误: /NH 开关不能与 LIST 格式同时使用"，直接导致本工具完全拿不到数据。
+    // 所以下面解析不到任务且错误行与 /NH 相关时，会**不带 /NH 重试一次**（首行是表头，跳过）。
+    auto parse_csv = [&](const std::string& text, bool skip_header, json& tasks,
+                         std::string& error_line) {
+        std::istringstream ss(text);
+        std::string line;
+        bool first = true;
+        while (std::getline(ss, line) && static_cast<int>(tasks.size()) < limit) {
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (first && skip_header) {
+                first = false;
+                continue;   // 不带 /NH 时第一行是表头（TaskName, Next Run Time, ...）
+            }
+            first = false;
+            // 本地化的错误/提示行（"错误: ..." / "ERROR: ..." / "信息: ..."）不是任务名
+            std::string low_line = lower(line);
+            if (low_line.rfind("错误", 0) == 0 || low_line.rfind("error", 0) == 0 ||
+                low_line.rfind("info", 0) == 0 || low_line.rfind("信息", 0) == 0) {
+                if (error_line.empty()) error_line = line;
+                continue;
+            }
+            // CSV 第一列
+            std::string name;
+            if (!line.empty() && line[0] == '"') {
+                size_t end = line.find('"', 1);
+                name = line.substr(1, end == std::string::npos ? std::string::npos : end - 1);
+            } else {
+                size_t comma = line.find(',');
+                name = line.substr(0, comma);
+            }
+            while (!name.empty() && name.front() == '\\') name.erase(name.begin());
+            if (name.empty()) continue;
+            // 兜底：若表头没被跳过，靠首列名字认出来
+            if (lower(name) == "taskname" || name == "任务名") { tasks.clear(); continue; }
+            if (!kw.empty() && lower(name).find(kw) == std::string::npos) continue;
+            tasks.push_back(name);
+        }
+    };
+
+    auto nh_related = [](const std::string& s) {
+        std::string low = lower(s);
+        return low.find("/nh") != std::string::npos || s.find("开关不能与") != std::string::npos;
+    };
+
+    std::string text = aiext::run_capture("schtasks /query /fo CSV /nh", 30000, 512 * 1024);
+    json tasks = json::array();
+    std::string error_line;
+    if (text.rfind("ERROR: ", 0) != 0) parse_csv(text, false, tasks, error_line);
+
+    // /NH 被系统拒绝 → 退回不带 /NH 的 CSV（表头跳过）
+    if (tasks.empty() && (!error_line.empty() ? nh_related(error_line) : text.rfind("ERROR: ", 0) == 0)) {
+        std::string retry = aiext::run_capture("schtasks /query /fo CSV", 30000, 512 * 1024);
+        if (retry.rfind("ERROR: ", 0) != 0) {
+            json retry_tasks = json::array();
+            std::string retry_error;
+            parse_csv(retry, true, retry_tasks, retry_error);
+            if (!retry_tasks.empty()) {
+                tasks = retry_tasks;
+                error_line.clear();
+                json out = {{"returned", tasks.size()}, {"tasks", tasks},
+                            {"note", "本机 schtasks 不接受 /NH，已改用不带 /NH 的 CSV 输出"}};
+                return aiutil::dump_json(out);
+            }
+            if (error_line.empty()) error_line = retry_error;
+        }
+    }
+
+    if (text.rfind("ERROR: ", 0) == 0 && tasks.empty()) {
+        json from_store = list_tasks_from_store(limit, kw);
+        if (!from_store.empty())
+            return aiutil::dump_json(json{{"returned", from_store.size()}, {"tasks", from_store},
+                                          {"source", "tasks_dir"},
+                                          {"note", "schtasks 执行失败（" + text +
+                                                   "），已改为直接枚举任务库目录"}});
+        return text;
+    }
+
+    if (tasks.empty() && !error_line.empty()) {
+        // schtasks 自己报错时也退回任务库目录
+        json from_store = list_tasks_from_store(limit, kw);
+        if (!from_store.empty())
+            return aiutil::dump_json(json{{"returned", from_store.size()}, {"tasks", from_store},
+                                          {"source", "tasks_dir"},
+                                          {"note", "schtasks 不可用（" + error_line +
+                                                   "），已直接枚举任务库目录"}});
+        return ERR("schtasks 返回错误: " + error_line +
+                   "；任务库目录也读不到（通常需要管理员）");
+    }
+    json out = {{"returned", tasks.size()}, {"tasks", tasks}};
+    if (tasks.empty()) {
+        // 别静默返回空：把原文开头带上，失败原因一眼可见
+        std::string preview = text.substr(0, 300);
+        out["note"] = preview.empty() ? "schtasks 没有输出（可能被策略限制）"
+                                      : ("schtasks 未返回可用任务，原文开头: " + preview);
+    }
+    return aiutil::dump_json(out);
 }
 
 void enum_uninstall(HKEY root, const wchar_t* subkey, const std::string& kw, int limit, json& out) {
@@ -715,7 +903,7 @@ std::string t_get_event_xml(const json& a, AiContext&) {
     std::string err;
     std::string xml = ai_get_event_xml(source, rid, err);
     if (!err.empty()) return ERR(err);
-    if (xml.size() > 20000) xml = xml.substr(0, 20000) + "\n...[XML 被截断]";
+    if (xml.size() > 20000) xml = aiutil::utf8_truncate(xml, 20000) + "\n...[XML 被截断]";
     return xml;
 }
 
@@ -728,27 +916,32 @@ std::string t_quarantine_file(const json& a, AiContext& ctx) {
     if (!fs::is_regular_file(fs::path(to_wide_sys(path)))) return ERR("文件不存在: " + path);
     std::string reason = a.value("reason", "");
     std::error_code ec;
-    fs::create_directories(ctx.quarantine_dir, ec);
-    fs::path src(path);
-    std::string stem = src.stem().string();
-    std::string ext = src.extension().string();
+    // 全线 UTF-8 -> 宽字符：中文/日文文件名既要能隔离，也要保持文件名可读
+    const fs::path quarantine_dir(to_wide_sys(ctx.quarantine_dir));
+    fs::create_directories(quarantine_dir, ec);
+    const fs::path src(to_wide_sys(path));
+    std::string stem = aiutil::to_utf8(src.stem().wstring());
+    std::string ext = aiutil::to_utf8(src.extension().wstring());
     char ts[32];
     std::time_t t = std::time(nullptr);
     std::tm tmv{};
     localtime_s(&tmv, &t);
     std::strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", &tmv);
-    fs::path dest = fs::path(ctx.quarantine_dir) / (stem + "_" + ts + ext);
+    fs::path dest = quarantine_dir / to_wide_sys(stem + "_" + ts + ext);
     int counter = 1;
     while (fs::exists(dest, ec))
-        dest = fs::path(ctx.quarantine_dir) / (stem + "_" + ts + "_(" + std::to_string(counter++) + ")" + ext);
+        dest = quarantine_dir / to_wide_sys(stem + "_" + ts + "_(" + std::to_string(counter++) + ")" + ext);
     fs::rename(src, dest, ec);
     if (ec) return ERR("隔离失败: " + ec.message());
-    std::ofstream meta(sidecar_path(dest.string()));
+    std::ofstream meta(sidecar_path(aiutil::to_utf8(dest.wstring())));
     if (meta) {
-        meta << "{\"original\":" << json(path).dump() << ",\"quarantined_at\":" << json(now_iso()).dump()
-             << ",\"source\":\"ai\",\"reason\":" << json(reason).dump() << "}";
+        meta << "{\"original\":" << aiutil::dump_json(json(path))
+             << ",\"quarantined_at\":" << aiutil::dump_json(json(now_iso()))
+             << ",\"source\":\"ai\",\"reason\":" << aiutil::dump_json(json(reason)) << "}";
     }
-    return json{{"quarantined_to", dest.string()}, {"original", path}, {"reason", reason}}.dump();
+    // 路径统一转成 UTF-8（to_utf8）后再进 JSON，中文文件名不会变乱码
+    return aiutil::dump_json(json{{"quarantined_to", aiutil::to_utf8(dest.wstring())},
+                              {"original", path}, {"reason", reason}});
 }
 
 std::string t_restore_file(const json& a, AiContext&) {
@@ -771,13 +964,13 @@ std::string t_restore_file(const json& a, AiContext&) {
     int counter = 1;
     while (fs::exists(final_dest, ec)) {
         final_dest = dest.parent_path() /
-                     (dest.stem().string() + "_(" + std::to_string(counter++) + ")" + dest.extension().string());
+                     aiutil::to_utf8(dest.stem().wstring() + L"_(" + std::to_wstring(counter++) + L")" + dest.extension().wstring());
     }
     fs::rename(fs::path(to_wide_sys(quarantined)), final_dest, ec);
     if (ec) return ERR("恢复失败: " + ec.message());
     std::error_code rec;
     fs::remove(fs::path(to_wide_sys(meta)), rec);
-    return json{{"restored_to", final_dest.string()}}.dump();
+    return json{{"restored_to", aiutil::to_utf8(final_dest.wstring())}}.dump();
 }
 
 std::string t_kill_process(const json& a, AiContext&) {
@@ -826,7 +1019,7 @@ std::string t_list_quarantine(const json&, AiContext& ctx) {
          it != fs::directory_iterator() && files.size() < 200; it.increment(ec)) {
         if (ec) break;
         if (!it->is_regular_file(ec)) continue;
-        std::string name = it->path().filename().string();
+        std::string name = aiutil::to_utf8(it->path().filename().wstring());
         if (name.size() > 8 && name.substr(name.size() - 8) == ".ai.json") continue;
         files.push_back({{"name", name}, {"size", static_cast<unsigned long long>(it->file_size(ec))}});
     }
@@ -854,6 +1047,17 @@ std::string t_get_engine_status(const json&, AiContext& ctx) {
 
 // ---------------- 注册表 ----------------
 
+// 处置类工具（统一审计清单；审计由 ai_execute_tool 写入 ctx.audit_log_file）
+const char* const kMutating[] = {
+    "dump_memory", "quarantine_file", "restore_file", "kill_process",
+    "suspend_process", "resume_process", "kill_process_tree",
+    "delete_registry_value", "remove_persistence", "stop_service",
+    "delete_service", "delete_scheduled_task", "block_ip", "block_domain",
+    "write_yara_rule", "save_baseline", "set_safety", "close_window",
+};
+
+std::string t_list_tools(const json& args, AiContext& ctx);  // 定义在 tools() 之后
+
 struct ToolDef {
     const char* name;
     const char* category;
@@ -864,7 +1068,13 @@ struct ToolDef {
 };
 
 std::string prop(const char* type, const char* desc) {
-    return std::string("{\"type\":\"") + type + "\",\"description\":\"" + desc + "\"}";
+    // description 里可能出现反斜杠/引号，必须转义，否则整份 schema JSON 解析失败
+    std::string d;
+    for (const char* p = desc; *p; ++p) {
+        if (*p == '\\' || *p == '"') d += '\\';
+        d += *p;
+    }
+    return std::string("{\"type\":\"") + type + "\",\"description\":\"" + d + "\"}";
 }
 
 const std::vector<ToolDef>& tools() {
@@ -874,8 +1084,8 @@ const std::vector<ToolDef>& tools() {
          {}, t_list_processes},
         {"get_process_info", "进程", "获取单个进程详情：路径、父进程、启动时间、内存、可执行文件 SHA256。",
          json::parse(R"({"pid":)" + prop("integer", "进程 PID") + "}"), {"pid"}, t_get_process_info},
-        {"list_process_modules", "进程", "列出进程已加载的模块（DLL/映像路径）。",
-         json::parse(R"({"pid":)" + prop("integer", "进程 PID") + R"(,"limit":)" + prop("integer", "默认 200") + "}"),
+        {"list_process_modules", "进程", "列出进程已加载的模块（可分页；filter=unsigned 只看无签名模块，识别注入/未签名 DLL）。",
+         json::parse(R"({"pid":)" + prop("integer", "进程 PID") + R"(,"limit":)" + prop("integer", "默认 200") + R"(,"offset":)" + prop("integer", "分页偏移，默认 0") + R"(,"filter":)" + prop("string", "all|unsigned") + "}"),
          {"pid"}, t_list_process_modules},
         {"dump_memory", "进程", "DUMP_MEMORY: 把进程可读内存转储到 logs/ai_dumps/（默认上限 64MB）。",
          json::parse(R"({"pid":)" + prop("integer", "进程 PID") + R"(,"max_mb":)" + prop("integer", "上限 MB，默认 64") + "}"),
@@ -932,8 +1142,199 @@ const std::vector<ToolDef>& tools() {
          {}, t_read_engine_log},
         {"list_quarantine", "情报", "列出隔离区文件。", json::parse("{}"), {}, t_list_quarantine},
         {"get_engine_status", "情报", "获取引擎整体状态（YARA/ClamAV/路径）。", json::parse("{}"), {}, t_get_engine_status},
+
+        // ---------- 扩展工具（todolist.txt，实现在 ai_tools_*.cpp） ----------
+        // 进程 / 线程 / 内存 / 签名
+        {"get_process_tree", "进程", "按 PID 列出完整后代进程树（父子关系 + 深度），判断谁拉起了谁。",
+         json::parse(R"({"pid":)" + prop("integer", "进程 PID") + R"(,"depth":)" + prop("integer", "树深度，默认 3") + R"(,"limit":)" + prop("integer", "最多节点数，默认 200") + "}"),
+         {"pid"}, t_get_process_tree},
+        {"get_parent_chain", "进程", "按 PID 向上回溯完整父子链到根进程。",
+         json::parse(R"({"pid":)" + prop("integer", "进程 PID") + R"(,"limit":)" + prop("integer", "最多层，默认 16") + "}"),
+         {"pid"}, t_get_parent_chain},
+        {"get_process_commandline", "进程", "读进程完整命令行/工作目录/启动用户/完整性级别（读 PEB，可识别 -enc、-w hidden 等伪装参数）。",
+         json::parse(R"({"pid":)" + prop("integer", "进程 PID") + "}"), {"pid"}, t_get_process_commandline},
+        {"get_process_env", "进程", "读进程环境变量块（TEMP/PATH/代理等，判断环境伪装）。",
+         json::parse(R"({"pid":)" + prop("integer", "进程 PID") + R"(,"limit":)" + prop("integer", "最多条数，默认 200") + "}"),
+         {"pid"}, t_get_process_env},
+        {"list_threads", "进程", "列出进程线程与起始地址；起始地址落在非映像内存 = 注入/反射加载证据。",
+         json::parse(R"({"pid":)" + prop("integer", "进程 PID") + R"(,"limit":)" + prop("integer", "默认 200") + "}"),
+         {"pid"}, t_list_threads},
+        {"get_thread_start_address", "进程", "取单个线程起始地址并判断是否在非映像内存。",
+         json::parse(R"({"tid":)" + prop("integer", "线程 TID") + "}"), {"tid"}, t_get_thread_start_address},
+        {"list_handles", "进程", "列出进程句柄表（互斥体/节区/文件/键），勒索与横向移动识别。"
+                              "句柄表可能有上万条，必须给出 type/name/handle 之一作为过滤条件；"
+                              "type=\"any\" 只返回按类型的计数概览。需要管理员权限。"
+                              "有名额与时间预算（budget_ms），目标进程句柄表剧烈变化时会在预算内"
+                              "返回部分结果并在 diagnostics.stopped_reason 说明原因；"
+                              "若目标有看门狗行为，建议先 suspend_process 或改用 "
+                              "list_threads/list_process_modules/事件流取证。",
+         json::parse(R"({"pid":)" + prop("integer", "进程 PID") + R"(,"type":)" + prop("string", "对象类型名（子串），如 File/Mutant/Key/Section；any=只回类型计数") + R"(,"name":)" + prop("string", "名字子串，如 \\Device\\ 或 .dll") + R"(,"handle":)" + prop("string", "句柄值，如 0x1a4 或 420") + R"(,"limit":)" + prop("integer", "返回条目上限，默认 200，上限 1000") + R"(,"budget_ms":)" + prop("integer", "总时间预算毫秒，默认 5000，范围 1000-30000") + R"(,"name_limit":)" + prop("integer", "名字解析次数上限，默认 200") + "}"),
+         {"pid"}, t_list_handles},
+        {"scan_memory_regions", "进程", "枚举进程私有可执行内存区域（无文件注入证据）并做熵 + YARA 扫描。",
+         json::parse(R"({"pid":)" + prop("integer", "进程 PID") + R"(,"max_mb":)" + prop("integer", "扫描预算 MB，默认 32") + R"(,"max_regions":)" + prop("integer", "最多区域数，默认 64") + R"(,"yara":)" + prop("boolean", "默认 true") + R"(,"rules_path":)" + prop("string", "规则目录，默认取引擎配置") + "}"),
+         {"pid"}, t_scan_memory_regions},
+        {"suspend_process", "处置", "挂起进程（取证前冻结，防样本自毁）。",
+         json::parse(R"({"pid":)" + prop("integer", "进程 PID") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"pid"}, t_suspend_process},
+        {"resume_process", "处置", "恢复被挂起的进程。",
+         json::parse(R"({"pid":)" + prop("integer", "进程 PID") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"pid"}, t_resume_process},
+        {"kill_process_tree", "处置", "连后代一起终止进程树（叶子优先，防互守复活）。",
+         json::parse(R"({"pid":)" + prop("integer", "根进程 PID") + R"(,"include_self":)" + prop("boolean", "默认 true") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"pid"}, t_kill_process_tree},
+        {"verify_signature", "文件", "校验 Authenticode 签名（签名者/颁发者/时间戳/吊销），区分微软签名与无签名。",
+         json::parse(R"({"path":)" + prop("string", "文件绝对路径") + R"(,"check_revocation":)" + prop("boolean", "默认 false，开启会联网查吊销") + "}"),
+         {"path"}, t_verify_signature},
+        // 文件取证与时间线
+        {"list_files", "文件", "目录枚举（大小/创建/修改/访问时间），用于 %TEMP%、%APPDATA%、Startup 巡检。",
+         json::parse(R"({"dir":)" + prop("string", "目录绝对路径") + R"(,"recursive":)" + prop("boolean", "默认 false") + R"(,"filter":)" + prop("string", "通配符，默认 *") + R"(,"limit":)" + prop("integer", "默认 200") + R"(,"sort":)" + prop("string", "created|modified|size|name") + "}"),
+         {"dir"}, t_list_files},
+        {"get_file_metadata", "文件", "文件元数据：时间戳/属性/硬链接数/所有者/熵值/格式魔数。",
+         json::parse(R"({"path":)" + prop("string", "文件绝对路径") + "}"), {"path"}, t_get_file_metadata},
+        {"get_ads", "文件", "读 NTFS 备用数据流与 Zone.Identifier（判断文件来源是下载/邮件）。",
+         json::parse(R"({"path":)" + prop("string", "文件绝对路径") + "}"), {"path"}, t_get_ads},
+        {"get_recent_files", "文件", "按 USN 日志拉取近期创建/改名文件（还原落地动作，需要管理员）。",
+         json::parse(R"({"hours":)" + prop("number", "回溯小时，默认 24") + R"(,"volumes":)" + prop("string", "卷，如 C: 或 C:,D:，默认 C:") + R"(,"limit":)" + prop("integer", "默认 100") + R"(,"event":)" + prop("string", "create|rename|all") + "}"),
+         {}, t_get_recent_files},
+        // 注册表与持久化
+        {"enumerate_registry_tree", "系统", "递归枚举注册表键树与值（Run/Services 逐条查不再费劲）。",
+         json::parse(R"({"key":)" + prop("string", "如 HKLM/SOFTWARE/...") + R"(,"depth":)" + prop("integer", "默认 2") + R"(,"values":)" + prop("boolean", "默认 true") + R"(,"limit":)" + prop("integer", "默认 200") + "}"),
+         {"key"}, t_enumerate_registry_tree},
+        {"check_persistence", "情报", "聚合检查常见持久化位置（Run/Winlogon/IFEO/服务/COM 劫持/LSA/打印监视器）。",
+         json::parse("{}"), {}, t_check_persistence},
+        {"list_wmi_subscriptions", "情报", "列出 WMI 永久订阅（__EventFilter/消费者/绑定），常见无文件持久化盲区。",
+         json::parse(R"({"limit":)" + prop("integer", "默认 50") + "}"), {}, t_list_wmi_subscriptions},
+        {"list_startup_folders", "情报", "列出用户与公共启动文件夹内容。",
+         json::parse("{}"), {}, t_list_startup_folders},
+        {"list_drivers_loaded", "情报", "列出已加载内核驱动（用户态枚举，rootkit 识别参考）。",
+         json::parse(R"({"limit":)" + prop("integer", "默认 200") + "}"), {}, t_list_drivers_loaded},
+        {"delete_registry_value", "处置", "删除注册表值（清持久化）。",
+         json::parse(R"({"key":)" + prop("string", "如 HKCU/.../Run") + R"(,"value_name":)" + prop("string", "值名") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"key", "value_name"}, t_delete_registry_value},
+        {"remove_persistence", "处置", "按类型移除持久化项（registry/service/task/wmi）。",
+         json::parse(R"({"type":)" + prop("string", "registry|service|task|wmi") + R"(,"target":)" + prop("string", "定位：注册表用 HKCU/.../Run:值名，服务/任务用名称，wmi 用 filter:名") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"type", "target"}, t_remove_persistence},
+        {"stop_service", "处置", "停止服务。",
+         json::parse(R"({"name":)" + prop("string", "服务名") + R"(,"force":)" + prop("boolean", "默认 true") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"name"}, t_stop_service},
+        {"delete_service", "处置", "删除服务（先停再删）。",
+         json::parse(R"({"name":)" + prop("string", "服务名") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"name"}, t_delete_service},
+        {"delete_scheduled_task", "处置", "删除计划任务。",
+         json::parse(R"({"name":)" + prop("string", "任务名") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"name"}, t_delete_scheduled_task},
+        // 网络侧
+        {"get_dns_cache", "网络", "本机 DNS 解析缓存（补历史 C2 域名）。",
+         json::parse(R"({"limit":)" + prop("integer", "默认 200") + "}"), {}, t_get_dns_cache},
+        {"list_udp_endpoints", "网络", "列出 UDP 端点（进程/本地端口）。",
+         json::parse(R"({"pid":)" + prop("integer", "只看该 PID") + R"(,"limit":)" + prop("integer", "默认 200") + "}"),
+         {}, t_list_udp_endpoints},
+        {"list_listeners", "网络", "列出监听端口（进程/创建时间/模块）。",
+         json::parse(R"({"pid":)" + prop("integer", "只看该 PID") + R"(,"limit":)" + prop("integer", "默认 200") + "}"),
+         {}, t_list_listeners},
+        {"resolve_ip_domains", "网络", "把远端 IP 反查成 DNS 缓存里最近解析过的域名（识别 C2 域）。",
+         json::parse(R"({"ip":)" + prop("string", "IP 地址") + "}"), {"ip"}, t_resolve_ip_domains},
+        {"get_route_table", "网络", "本机路由表。",
+         json::parse(R"({"limit":)" + prop("integer", "默认 100") + "}"), {}, t_get_route_table},
+        {"get_arp_cache", "网络", "ARP 缓存（内网横向线索）。",
+         json::parse(R"({"limit":)" + prop("integer", "默认 200") + "}"), {}, t_get_arp_cache},
+        {"list_firewall_rules", "网络", "只读查询防火墙规则（netsh）。",
+         json::parse(R"({"profile":)" + prop("string", "domain|private|public|all") + R"(,"limit":)" + prop("integer", "默认 100") + "}"),
+         {}, t_list_firewall_rules},
+        {"get_proxy_config", "网络", "查 WinHTTP/WinINet 代理设置（判断是否被改代理劫持流量）。",
+         json::parse("{}"), {}, t_get_proxy_config},
+        {"block_ip", "处置", "防火墙封禁 IP（掐断 C2；需要管理员）。",
+         json::parse(R"({"ip":)" + prop("string", "IP 地址") + R"(,"name":)" + prop("string", "规则名，默认自动生成") + R"(,"direction":)" + prop("string", "out|in，默认 out") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"ip"}, t_block_ip},
+        {"block_domain", "处置", "解析域名并封禁解析出的 IP（需要管理员）。",
+         json::parse(R"({"domain":)" + prop("string", "域名") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"domain"}, t_block_domain},
+        // 日志与脚本侧
+        {"get_script_block_log", "情报", "读 PowerShell 4104 脚本块日志（还原混淆脚本的真实内容）。",
+         json::parse(R"({"hours":)" + prop("number", "默认 24") + R"(,"limit":)" + prop("integer", "默认 50") + R"(,"channel":)" + prop("string", "默认 Microsoft-Windows-PowerShell/Operational") + "}"),
+         {}, t_get_script_block_log},
+        {"get_powershell_transcript", "情报", "查找 PowerShell 转录文件（完整会话记录）。",
+         json::parse(R"({"limit":)" + prop("integer", "默认 20") + "}"), {}, t_get_powershell_transcript},
+        {"decode_script", "情报", "还原混淆脚本：base64(-EncodedCommand)/hex/XOR/拼接，直接给出明文。",
+         json::parse(R"({"text":)" + prop("string", "混淆文本") + R"(,"encodings":)" + prop("string", "auto|base64|base64_utf16|hex|xor") + R"(,"key":)" + prop("string", "XOR 密钥或单字节值") + R"(,"limit":)" + prop("integer", "默认 4000") + "}"),
+         {"text"}, t_decode_script},
+        {"subscribe_events", "情报", "开始实时订阅事件流（边跑边看，不再反复轮询）。",
+         json::parse(R"({"source":)" + prop("string", "sysmon|powershell|security|system|application|wmi|dns 或通道名") + R"(,"keyword":)" + prop("string", "过滤关键字") + "}"),
+         {"source"}, t_subscribe_events},
+        {"tail_events", "情报", "取走实时订阅自上次以来的新事件。",
+         json::parse(R"({"max":)" + prop("integer", "默认 50") + "}"), {}, t_tail_events},
+        {"unsubscribe_events", "情报", "停止实时订阅。", json::parse("{}"), {}, t_unsubscribe_events},
+        {"get_etw", "情报", "按显式通道名查事件（WMI-Activity/DNS-Client 等用户态可消费通道）。",
+         json::parse(R"({"channel":)" + prop("string", "通道名或短名") + R"(,"hours":)" + prop("number", "默认 1") + R"(,"limit":)" + prop("integer", "默认 50") + R"(,"level":)" + prop("integer", "级别过滤") + "}"),
+         {"channel"}, t_get_etw},
+        {"get_amsi_events", "情报", "AMSI 相关事件（Threat-Intelligence 通道；读不到时回退 4104 脚本块日志）。",
+         json::parse(R"({"limit":)" + prop("integer", "默认 50") + "}"), {}, t_get_amsi_events},
+        {"get_security_log", "情报", "Security 日志 4624/4625/4672/4688（登录/提权/口令喷洒；需要管理员）。",
+         json::parse(R"({"hours":)" + prop("number", "默认 24") + R"(,"limit":)" + prop("integer", "默认 50") + R"(,"event_id":)" + prop("integer", "只看某事件 ID") + "}"),
+         {}, t_get_security_log},
+        // 情报与元工具
+        {"reputation_lookup", "情报", "信誉查询：本地启发式（私网/可疑TLD/黑名单）+ 可选配置端点在线查。",
+         json::parse(R"({"value":)" + prop("string", "hash/ip/domain/url") + R"(,"type":)" + prop("string", "hash|ip|domain|url|auto") + R"(,"endpoint":)" + prop("string", "可选查询端点 URL 模板，含 {value} 占位符") + R"(,"api_key":)" + prop("string", "可选") + R"(,"timeout":)" + prop("integer", "默认 5") + "}"),
+         {"value"}, t_reputation_lookup},
+        {"build_static_report", "情报", "聚合静态报告：哈希/熵/PE/签名/字符串样本/YARA+ClamAV 结论。",
+         json::parse(R"({"path":)" + prop("string", "文件绝对路径") + "}"), {"path"}, t_build_static_report},
+        {"write_yara_rule", "处置", "把现场特征写成 YARA 规则（先验证可编译再入规则库）。",
+         json::parse(R"({"name":)" + prop("string", "规则名 [A-Za-z0-9_]") +
+                     R"(,"strings":{"type":"array","items":{"type":"string"},"description":"特征字符串数组"})" +
+                     R"(,"condition":)" + prop("string", "默认 any of them") + R"(,"description":)" + prop("string", "可选") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"name", "strings"}, t_write_yara_rule},
+        {"scan_with_rule", "文件", "用临时/库内规则立即扫描文件或目录。",
+         json::parse(R"({"rule":)" + prop("string", "YARA 源文本或规则库 yara 子目录下的规则文件名") + R"(,"target":)" + prop("string", "文件或目录") + R"(,"limit":)" + prop("integer", "默认 50") + "}"),
+         {"rule", "target"}, t_scan_with_rule},
+        {"save_baseline", "处置", "保存当前进程/服务/任务/启动项基线快照。",
+         json::parse(R"({"kind":)" + prop("string", "process|service|task|startup|all") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {}, t_save_baseline},
+        {"compare_baseline", "情报", "当前状态与基线 diff（识别新增进程/服务/任务）。",
+         json::parse(R"({"kind":)" + prop("string", "process|service|task|startup|all") + R"(,"baseline":)" + prop("string", "可选基线文件，默认最新") + "}"),
+         {}, t_compare_baseline},
+        {"set_safety", "情报", "查看/设置本会话安全参数（dry-run 开关、结果上限）。",
+         json::parse(R"({"dry_run":)" + prop("boolean", "省略则只查看") + R"(,"max_tool_result_chars":)" + prop("integer", "省略则只查看") + "}"),
+         {}, t_set_safety},
+        {"list_windows", "窗口",
+         "枚举窗口并定位其代码来源：每个窗口都给出 class_module（注册该窗口类的模块）与 "
+         "wndproc（真正处理消息的代码）及其归属模块——弹窗逻辑在注入的 DLL 里时能一次定位，"
+         "不必逐个翻模块；两者不在目标 loader 列表里即为手工映射/被 rootkit 隐藏的强信号。"
+         "scope: auto=Win10+ 枚举所有窗口站/桌面、Win7/8 只枚举当前桌面；all 会尝试其他 session"
+         "（需要管理员，打不开的列在 diagnostics.skipped_desktops）。",
+         json::parse(R"({"scope":)" + prop("string", "auto|desktop|session|all") + R"(,"title_contains":)" + prop("string", "标题子串") + R"(,"class_contains":)" + prop("string", "类名子串") + R"(,"pid":)" + prop("integer", "只看该进程的窗口") + R"(,"visible_only":)" + prop("boolean", "默认 false") + R"(,"limit":)" + prop("integer", "默认 100，上限 1000") + "}"),
+         {}, t_list_windows},
+        {"get_window_detail", "窗口",
+         "单个窗口的完整画像：父/属主链、窗口线程起始地址与内存属性、class_module/wndproc 归属与"
+         "签名、是否无响应(hung)、进程未签名模块抽样，并给出 next_steps。",
+         json::parse(R"({"hwnd":)" + prop("string", "窗口句柄，如 0x00010A2C 或十进制") + "}"),
+         {"hwnd"}, t_get_window_detail},
+        {"close_window", "窗口",
+         "关闭窗口（处置类）。method=wm_close 礼貌发送 WM_CLOSE（默认）；method=end_task 等价"
+         "任务管理器的强制结束。WM_DESTROY 不能跨进程投递，会被明确拒绝并说明替代方式；"
+         "关键进程（winlogon/lsass/csrss 等）的窗口一律拒绝。",
+         json::parse(R"({"hwnd":)" + prop("string", "窗口句柄，如 0x00010A2C 或十进制") + R"(,"method":)" + prop("string", "wm_close|end_task") + R"(,"dry_run":)" + prop("boolean", "默认 false") + "}"),
+         {"hwnd"}, t_close_window},
+        {"list_tools", "情报", "列出本引擎全部 AI 工具（名称/类别/是否只读），供自我发现。",
+         json::parse(R"({"category":)" + prop("string", "按类别过滤，如 进程") + "}"), {}, t_list_tools},
     };
     return kTools;
+}
+
+std::string t_list_tools(const json& args, AiContext& /*ctx*/) {
+    std::string want = lower(args.value("category", ""));
+    json items = json::array();
+    int count = 0;
+    for (const auto& t : tools()) {
+        if (!want.empty() && lower(t.category) != want) continue;
+        bool readonly = true;
+        for (const char* m : kMutating) {
+            if (std::string(m) == t.name) { readonly = false; break; }
+        }
+        items.push_back({{"name", t.name}, {"category", t.category}, {"readonly", readonly}});
+        ++count;
+    }
+    json out = {{"count", count}, {"tools", items}};
+    return aiutil::dump_json(out);
 }
 
 }  // namespace
@@ -955,16 +1356,27 @@ json ai_tool_schemas() {
 std::string ai_execute_tool(const std::string& name, const json& args, AiContext& ctx) {
     for (const auto& t : tools()) {
         if (name == t.name) {
+            std::string result;
             try {
-                std::string result = t.func(args, ctx);
-                if (static_cast<int>(result.size()) > ctx.max_tool_result_chars) {
-                    result = result.substr(0, ctx.max_tool_result_chars) +
-                             "\n...[结果被截断，请收窄参数后重试]";
-                }
-                return result;
+                result = t.func(args, ctx);
             } catch (const std::exception& e) {
-                return ERR(std::string("工具执行异常: ") + e.what());
+                result = ERR(std::string("工具执行异常: ") + e.what());
             }
+            // 处置类动作统一写审计（追加式 + 哈希链）；审计失败不影响工具本身
+            for (const char* m : kMutating) {
+                if (std::string(m) == name) {
+                    size_t nl = result.find('\n');
+                    std::string summary = (nl == std::string::npos) ? result : result.substr(0, nl);
+                    aiext::audit_log(ctx, name, args, summary);
+                    break;
+                }
+            }
+            if (static_cast<int>(result.size()) > ctx.max_tool_result_chars) {
+                // 按字符边界截断，避免把汉字劈成半个（否则回传给模型的 JSON 会非法）
+                result = aiutil::utf8_truncate(result, static_cast<size_t>(ctx.max_tool_result_chars)) +
+                         "\n...[结果被截断，请收窄参数后重试]";
+            }
+            return result;
         }
     }
     return ERR("未知工具 " + name);

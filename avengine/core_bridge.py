@@ -32,6 +32,10 @@ class CoreError(RuntimeError):
     """C++ 内核返回错误或无 DLL 时抛出。"""
 
 
+# AI 流式事件回调：void cb(const char* event_json, void* user)
+_AI_EVENT_CB = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_void_p)
+
+
 def _candidate_paths() -> Iterator[Path]:
     env = os.environ.get(_DLL_ENV)
     if env:
@@ -87,6 +91,20 @@ def _setup(lib: ctypes.CDLL) -> None:
     lib.avc_ai_run_batch.restype = ctypes.c_void_p
     lib.avc_ai_ask.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
     lib.avc_ai_ask.restype = ctypes.c_void_p
+
+    # 流式版本（事件回调）；旧 DLL 没有这些符号时走 hasattr 判断，见 supports_ai_stream()
+    if hasattr(lib, "avc_ai_ask_stream"):
+        lib.avc_ai_ask_stream.argtypes = [ctypes.c_char_p, ctypes.c_char_p,
+                                          _AI_EVENT_CB, ctypes.c_void_p]
+        lib.avc_ai_ask_stream.restype = ctypes.c_void_p
+    if hasattr(lib, "avc_ai_run_batch_stream"):
+        lib.avc_ai_run_batch_stream.argtypes = [ctypes.c_char_p, ctypes.c_int,
+                                                _AI_EVENT_CB, ctypes.c_void_p]
+        lib.avc_ai_run_batch_stream.restype = ctypes.c_void_p
+    if hasattr(lib, "avc_ai_analyze_detection_stream"):
+        lib.avc_ai_analyze_detection_stream.argtypes = [ctypes.c_char_p, ctypes.c_char_p,
+                                                        _AI_EVENT_CB, ctypes.c_void_p]
+        lib.avc_ai_analyze_detection_stream.restype = ctypes.c_void_p
     lib.avc_ai_analyze_detection.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
     lib.avc_ai_analyze_detection.restype = ctypes.c_void_p
     lib.avc_ai_start_background.argtypes = [ctypes.c_char_p]
@@ -153,10 +171,18 @@ def version() -> str:
 
 
 def _clam_params(clamav: Optional[Dict[str, Any]]):
-    if not clamav:
+    """
+    把 config.yaml 的 clamav 段转成内核参数 (host, port, timeout)。
+
+    - clamav 为 None：调用方显式声明「不使用 ClamAV」，内核跳过 ClamAV。
+    - 缺少 host / port 键（例如 config.yaml 缺失或解析失败后拿到空配置）：
+      回落到与 status 一致的内置默认值 127.0.0.1:3310，避免扫描**静默**丢掉 ClamAV 引擎。
+    - host 显式置空字符串：按配置关闭 ClamAV（scripts\\set_clamav.bat -ClamdHost none 的写法）。
+    """
+    if clamav is None:
         return b"", 0, 0
     host = _b(clamav.get("host", "127.0.0.1"))
-    port = int(clamav.get("port", 0) or 0)
+    port = int(clamav.get("port", 3310) or 3310)
     timeout = int(clamav.get("timeout", 30) or 30)
     return host, port, timeout
 
@@ -284,6 +310,62 @@ def ai_ask(config: Dict[str, Any], question: str) -> Dict[str, Any]:
     if lib is None:
         raise CoreError(_load_error or "核心库不可用")
     return _consume(lib.avc_ai_ask(_cfg_json(config), _b(question)))
+
+
+# -------------------- AI 流式（过程可见） --------------------
+
+def supports_ai_stream() -> bool:
+    """当前 avengine_core.dll 是否带流式事件接口（旧构建没有，需要重新 build）。"""
+    lib = _load()
+    return bool(lib is not None and hasattr(lib, "avc_ai_ask_stream"))
+
+
+def _event_forwarder(on_event):
+    """
+    把 Python 回调包成 C 回调。
+
+    注意：ctypes 回调里抛异常不会传回 C++（会被解释器吞掉并打印），
+    所以这里自己兜住，绝不让 UI 的小毛病影响 AI 会话。
+    """
+
+    def _cb(raw, _user):
+        if raw is None or on_event is None:
+            return
+        try:
+            on_event(json.loads(raw.decode("utf-8", errors="replace")))
+        except Exception:  # noqa: BLE001 - 回调必须静默
+            pass
+
+    return _AI_EVENT_CB(_cb)
+
+
+def _stream_call(fn_name: str, args, on_event) -> Dict[str, Any]:
+    lib = _load()
+    if lib is None:
+        raise CoreError(_load_error or "核心库不可用")
+    fn = getattr(lib, fn_name, None)
+    if fn is None:
+        raise CoreError(f"当前 avengine_core.dll 不支持 {fn_name}（请重新运行 cpp\\build.bat 构建）")
+    cb = _event_forwarder(on_event)   # 保持引用直到调用结束
+    ptr = fn(*args, cb, None)
+    return _consume(ptr)
+
+
+def ai_ask_stream(config: Dict[str, Any], question: str, on_event=None) -> Dict[str, Any]:
+    """流式问答：on_event(event_dict) 会在模型思考/调用工具/输出正文时被实时调用。"""
+    return _stream_call("avc_ai_ask_stream", (_cfg_json(config), _b(question)), on_event)
+
+
+def ai_run_batch_stream(config: Dict[str, Any], minutes: int = 0, on_event=None) -> Dict[str, Any]:
+    """流式批次分析。"""
+    return _stream_call("avc_ai_run_batch_stream", (_cfg_json(config), int(minutes)), on_event)
+
+
+def ai_analyze_detection_stream(config: Dict[str, Any], detection: Dict[str, Any],
+                                on_event=None) -> Dict[str, Any]:
+    """流式检出联动分析。"""
+    return _stream_call("avc_ai_analyze_detection_stream",
+                        (_cfg_json(config), _cfg_json(detection)), on_event)
 
 
 def ai_analyze_detection(config: Dict[str, Any], detection: Dict[str, Any]) -> Dict[str, Any]:

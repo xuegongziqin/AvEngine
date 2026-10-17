@@ -39,6 +39,18 @@ def test_version_nonempty():
     assert core_bridge.version()
 
 
+def test_clam_params_defaults_to_configured_port():
+    """
+    回归：config.yaml 缺失/解析失败时拿到空配置，旧版会把端口退化成 0，
+    内核于是**静默**跳过 ClamAV（status 却还显示 可用）→ EICAR 假阴性。
+    """
+    assert core_bridge._clam_params({}) == (b"127.0.0.1", 3310, 30)
+    assert core_bridge._clam_params({"host": "10.0.0.9"}) == (b"10.0.0.9", 3310, 30)
+    # 显式禁用（host 为空 / 传 None）仍然跳过 ClamAV
+    assert core_bridge._clam_params({"host": ""})[0] == b""
+    assert core_bridge._clam_params(None) == (b"", 0, 0)
+
+
 def test_sha256_matches_hashlib(tmp_path: Path):
     p = tmp_path / "a.txt"
     p.write_bytes(b"hello world")

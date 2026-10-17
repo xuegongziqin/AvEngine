@@ -15,7 +15,8 @@ if not exist "%SRC%" (
 where gcc >nul 2>nul
 if not errorlevel 1 (
     echo [build] compiler: MinGW gcc
-    gcc -O2 -Wall -Wextra -municode -o "%OUT%" "%SRC%" -ladvapi32
+    REM -s: strip debug symbols (much smaller exe)
+    gcc -O2 -Wall -Wextra -municode -s -o "%OUT%" "%SRC%" -ladvapi32
     if errorlevel 1 goto :fail
     goto :ok
 )
@@ -23,7 +24,8 @@ if not errorlevel 1 (
 where cl >nul 2>nul
 if not errorlevel 1 (
     echo [build] compiler: MSVC cl
-    cl /nologo /O2 /W4 /DUNICODE /D_UNICODE "%SRC%" /link /OUT:"%OUT%" advapi32.lib
+    REM /DEBUG:NONE + /OPT:REF,ICF: no debug info, drop unused code (equivalent of -s)
+    cl /nologo /O2 /W4 /DUNICODE /D_UNICODE "%SRC%" /link /DEBUG:NONE /OPT:REF /OPT:ICF /OUT:"%OUT%" advapi32.lib
     if errorlevel 1 goto :fail
     goto :ok
 )
@@ -33,7 +35,7 @@ if exist "%VSWHERE%" (
     echo [build] locating Visual Studio with vswhere...
     for /f "usebackq delims=" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
         call "%%i\VC\Auxiliary\Build\vcvars64.bat" >nul 2>nul
-        cl /nologo /O2 /W4 /DUNICODE /D_UNICODE "%SRC%" /link /OUT:"%OUT%" advapi32.lib
+        cl /nologo /O2 /W4 /DUNICODE /D_UNICODE "%SRC%" /link /DEBUG:NONE /OPT:REF /OPT:ICF /OUT:"%OUT%" advapi32.lib
         if not errorlevel 1 goto :ok
     )
 )

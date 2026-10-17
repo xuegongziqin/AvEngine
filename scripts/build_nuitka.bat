@@ -8,6 +8,13 @@ rem   clang   - Clang (requires a standalone clang/clang-cl on PATH)
 rem   mingw64 - Nuitka's own winlibs MinGW64 (downloads ~130MB if not cached)
 rem
 rem Prereq: cpp\build.bat must have produced third_party\dist\bin\avengine_core.dll
+rem
+rem Two options below exist for the GUI (see README section 16):
+rem   --enable-plugin=tk-inter       without it the packaged exe cannot use tkinter at all
+rem   --windows-console-mode=attach  double-click -> no black console window (GUI only);
+rem                                  run from cmd   -> output still goes to that console.
+rem   Do NOT use "disable"/"hide": they also kill stdout/stderr, so the CLI
+rem   (avengine.exe status / scan / ai ...) would print nothing at all.
 setlocal
 
 set ROOT=%~dp0..
@@ -31,6 +38,8 @@ if not exist "%DLL%" (
 echo [Nuitka] compiler=%COMPILER%
 "%PY%" -m nuitka ^
   --standalone ^
+  --enable-plugin=tk-inter ^
+  --windows-console-mode=attach ^
   %COMPFLAG% ^
   --assume-yes-for-downloads ^
   --show-memory ^

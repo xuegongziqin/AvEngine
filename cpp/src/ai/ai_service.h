@@ -3,6 +3,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -22,13 +23,19 @@ struct AiServiceConfig {
     AiContext ctx;
 };
 
+// 会话事件转发函数（见 AiSessionHooks 的事件说明）；传 nullptr 表示不要流式事件
+using AiEventFn = std::function<void(const nlohmann::json&)>;
+
 AiServiceConfig ai_parse_config(const nlohmann::json& j);
 nlohmann::json ai_session_to_json(const AiSessionResult& r);
 
-nlohmann::json ai_service_run_batch(const AiServiceConfig& cfg, int minutes);
-nlohmann::json ai_service_ask(const AiServiceConfig& cfg, const std::string& question);
+nlohmann::json ai_service_run_batch(const AiServiceConfig& cfg, int minutes,
+                                    const AiEventFn* on_event = nullptr);
+nlohmann::json ai_service_ask(const AiServiceConfig& cfg, const std::string& question,
+                              const AiEventFn* on_event = nullptr);
 nlohmann::json ai_service_analyze_detection(const AiServiceConfig& cfg,
-                                            const nlohmann::json& detection);
+                                            const nlohmann::json& detection,
+                                            const AiEventFn* on_event = nullptr);
 nlohmann::json ai_service_test(const AiServiceConfig& cfg);
 
 bool ai_bg_start(const AiServiceConfig& cfg, std::string& err);

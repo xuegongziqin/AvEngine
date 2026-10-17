@@ -8,12 +8,16 @@
 #include "yara_engine.h"
 
 #include "ai_service.h"
+#include "ai_tools_ext.h"
+#include "ai_util.h"
 #include <nlohmann/json.hpp>
 
+#include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -85,7 +89,9 @@ AVC_API char* avc_scan_path(const char* path, const char* rules_path, const char
     if (!path || !*path) { set_error("path 为空"); return nullptr; }
 
     std::error_code ec;
-    fs::path p(path);
+    // fs::path 从 char* 构造在 Windows 上按 ANSI 代码页解码 —— 中文路径会变成乱码，
+    // 于是"文件不存在"。路径进入内核时是 UTF-8，必须显式转宽字符。
+    fs::path p(aiutil::to_wide_path(path));
     if (!fs::is_regular_file(p, ec)) {
         set_error("文件不存在: " + std::string(path));
         return nullptr;
@@ -113,6 +119,32 @@ AVC_API char* avc_scan_path(const char* path, const char* rules_path, const char
     }
 
     bool infected = !matches.empty() || !virus.empty();
+
+    // 熵值 + 可疑格式识别（todolist 第 10 项）：采样前 4MB
+    std::string fmt_err;
+    std::vector<unsigned char> head = aiext::read_file_bytes(path, 4u * 1024 * 1024, fmt_err);
+    double entropy = aiext::shannon_entropy(head.data(), head.size());
+    std::string magic;
+    if (head.size() >= 2) {
+        if (head[0] == 'M' && head[1] == 'Z') magic = "PE";
+        else if (head[0] == 0x7F && head[1] == 'E' && head.size() >= 4 &&
+                 head[2] == 'L' && head[3] == 'F') magic = "ELF";
+        else if (head[0] == 'P' && head[1] == 'K') magic = "ZIP";
+        else if (head[0] == 0xD0 && head[1] == 0xCF) magic = "OLE2";
+        else if (head[0] == '#' && head[1] == '!') magic = "script";
+        else if (head[0] == '%' && head.size() >= 4 && head[1] == 'P' &&
+                 head[2] == 'D' && head[3] == 'F') magic = "PDF";
+    }
+    if (magic.empty() && head.size() >= 5) {
+        std::string head_text(reinterpret_cast<const char*>(head.data()),
+                              head.size() < 24 ? head.size() : 24);
+        for (char& c : head_text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (head_text.rfind("<?php", 0) == 0) magic = "php";
+        else if (head_text.find("<script") != std::string::npos) magic = "html/script";
+        else if (head_text.rfind("<html", 0) == 0) magic = "html";
+    }
+    bool packed_like = entropy > 7.2 && head.size() >= 16 * 1024;  // 高熵 + 足够大才谈 packed
+
     std::string j = "{";
     j += "\"path\":" + json_str(path) + ",";
     j += "\"size\":" + std::to_string(static_cast<unsigned long long>(size)) + ",";
@@ -122,6 +154,10 @@ AVC_API char* avc_scan_path(const char* path, const char* rules_path, const char
          ",\"matches\":" + join_json_array(matches) + "},";
     j += "\"clamav\":{\"available\":" + std::string(clam_avail ? "true" : "false") +
          ",\"virus\":" + (virus.empty() ? std::string("null") : json_str(virus)) + "},";
+    j += "\"entropy\":{\"value\":" + std::to_string(entropy) +
+         ",\"sampled_bytes\":" + std::to_string(static_cast<unsigned long long>(head.size())) +
+         ",\"high\":" + std::string(packed_like ? "true" : "false") + "},";
+    j += "\"format\":" + (magic.empty() ? std::string("null") : json_str(magic)) + ",";
     j += "\"verdict\":" + json_str(infected ? "infected" : "clean") + "}";
     return dup_out(j);
 }
@@ -132,7 +168,7 @@ AVC_API char* avc_scan_dir(const char* dir, const char* rules_path, const char* 
     if (!dir || !*dir) { set_error("dir 为空"); return nullptr; }
 
     std::error_code ec;
-    fs::path root(dir);
+    fs::path root(aiutil::to_wide_path(dir));   // 同上：UTF-8 -> 宽字符
     if (!fs::is_directory(root, ec)) {
         set_error("目录不存在: " + std::string(dir));
         return nullptr;
@@ -150,7 +186,9 @@ AVC_API char* avc_scan_dir(const char* dir, const char* rules_path, const char* 
          it != fs::recursive_directory_iterator(); it.increment(ec)) {
         if (ec) break;
         if (!it->is_regular_file(ec)) continue;
-        std::string file = it->path().string();
+        // 统一以 UTF-8 表示路径：下游（sha256 / YARA / clamd）都按 UTF-8 收，
+        // 再用 to_wide_path 转回宽字符，往返一致（中文/日文文件名不会丢）。
+        std::string file = aiutil::to_utf8(it->path().wstring());
         ++scanned;
 
         bool hit = false;
@@ -227,7 +265,7 @@ AVC_API char* avc_engine_status(const char* rules_path, const char* clam_host, i
                  {"skipped", yara.skipped_count()}};
     j["clamav"] = {{"available", clam_avail},
                    {"version", clam_ver.empty() ? nlohmann::json(nullptr) : nlohmann::json(clam_ver)}};
-    return dup_out(j.dump());
+    return dup_out(aiutil::dump_json(j));
 }
 
 AVC_API int avc_monitor_start(const char* rules_path, const char* quar_dir, const char* clam_host,
@@ -274,7 +312,7 @@ AVC_API char* avc_ai_test(const char* config_json) {
     clear_error();
     try {
         nlohmann::json j = nlohmann::json::parse(config_json ? config_json : "{}");
-        return dup_out(ai_service_test(ai_parse_config(j)).dump());
+        return dup_out(aiutil::dump_json(ai_service_test(ai_parse_config(j))));
     } catch (const std::exception& e) {
         set_error(e.what());
         return nullptr;
@@ -287,7 +325,7 @@ AVC_API char* avc_ai_run_batch(const char* config_json, int minutes) {
         nlohmann::json j = nlohmann::json::parse(config_json ? config_json : "{}");
         AiServiceConfig cfg = ai_parse_config(j);
         if (minutes <= 0) minutes = std::max(1, cfg.interval / 60);
-        return dup_out(ai_service_run_batch(cfg, minutes).dump());
+        return dup_out(aiutil::dump_json(ai_service_run_batch(cfg, minutes)));
     } catch (const std::exception& e) {
         set_error(e.what());
         return nullptr;
@@ -298,7 +336,7 @@ AVC_API char* avc_ai_ask(const char* config_json, const char* question) {
     clear_error();
     try {
         nlohmann::json j = nlohmann::json::parse(config_json ? config_json : "{}");
-        return dup_out(ai_service_ask(ai_parse_config(j), safe(question)).dump());
+        return dup_out(aiutil::dump_json(ai_service_ask(ai_parse_config(j), safe(question))));
     } catch (const std::exception& e) {
         set_error(e.what());
         return nullptr;
@@ -310,7 +348,67 @@ AVC_API char* avc_ai_analyze_detection(const char* config_json, const char* dete
     try {
         nlohmann::json cfgj = nlohmann::json::parse(config_json ? config_json : "{}");
         nlohmann::json det = nlohmann::json::parse(detection_json ? detection_json : "{}");
-        return dup_out(ai_service_analyze_detection(ai_parse_config(cfgj), det).dump());
+        return dup_out(aiutil::dump_json(ai_service_analyze_detection(ai_parse_config(cfgj), det)));
+    } catch (const std::exception& e) {
+        set_error(e.what());
+        return nullptr;
+    }
+}
+
+// -------------------- AI 流式事件 --------------------
+
+namespace {
+
+// 把 C 回调包成 C++ 事件转发；CB 为空时返回空 function（表示不需要事件）
+std::function<void(const nlohmann::json&)> event_forwarder(avc_ai_event_cb cb, void* user) {
+    if (!cb) return nullptr;
+    return [cb, user](const nlohmann::json& event) {
+        // 事件里可能带工具输出（含中文/GBK 字节），必须走安全 dump，否则序列化会抛异常
+        std::string text = aiutil::dump_json(event);
+        cb(text.c_str(), user);
+    };
+}
+
+}  // namespace
+
+AVC_API char* avc_ai_ask_stream(const char* config_json, const char* question,
+                                avc_ai_event_cb cb, void* user) {
+    clear_error();
+    try {
+        nlohmann::json j = nlohmann::json::parse(config_json ? config_json : "{}");
+        std::function<void(const nlohmann::json&)> fwd = event_forwarder(cb, user);
+        nlohmann::json result = ai_service_ask(ai_parse_config(j), safe(question), cb ? &fwd : nullptr);
+        return dup_out(aiutil::dump_json(result));
+    } catch (const std::exception& e) {
+        set_error(e.what());
+        return nullptr;
+    }
+}
+
+AVC_API char* avc_ai_run_batch_stream(const char* config_json, int minutes,
+                                      avc_ai_event_cb cb, void* user) {
+    clear_error();
+    try {
+        nlohmann::json j = nlohmann::json::parse(config_json ? config_json : "{}");
+        std::function<void(const nlohmann::json&)> fwd = event_forwarder(cb, user);
+        nlohmann::json result = ai_service_run_batch(ai_parse_config(j), minutes, cb ? &fwd : nullptr);
+        return dup_out(aiutil::dump_json(result));
+    } catch (const std::exception& e) {
+        set_error(e.what());
+        return nullptr;
+    }
+}
+
+AVC_API char* avc_ai_analyze_detection_stream(const char* config_json, const char* detection_json,
+                                              avc_ai_event_cb cb, void* user) {
+    clear_error();
+    try {
+        nlohmann::json cfgj = nlohmann::json::parse(config_json ? config_json : "{}");
+        nlohmann::json det = nlohmann::json::parse(detection_json ? detection_json : "{}");
+        std::function<void(const nlohmann::json&)> fwd = event_forwarder(cb, user);
+        nlohmann::json result = ai_service_analyze_detection(ai_parse_config(cfgj), det,
+                                                             cb ? &fwd : nullptr);
+        return dup_out(aiutil::dump_json(result));
     } catch (const std::exception& e) {
         set_error(e.what());
         return nullptr;

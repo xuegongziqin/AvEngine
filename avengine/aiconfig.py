@@ -8,11 +8,12 @@ aiconfig.py - AI 配置读取（config.ini）
 from __future__ import annotations
 
 import configparser
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
-from .paths import AI_CONFIG_FILE
+from .paths import AI_CONFIG_FILE, AI_DUMP_DIR, LOG_DIR, LOG_FILE, PROJECT_ROOT, resolve_path
 
 # 进入批次的事件源（fileio 恒不进批次，仅按需检索）
 BATCH_SOURCES = ("sysmon", "process", "network", "dns", "powershell", "system", "application")
@@ -108,3 +109,40 @@ def load_ai_config(path: Optional[Path] = None) -> AIConfig:
             cfg.sources[name] = _getbool(parser, "sources", name, DEFAULT_SOURCES[name])
 
     return cfg
+
+
+def build_ai_payload(config: Dict[str, Any],
+                     ai_cfg: Optional[AIConfig] = None) -> Dict[str, Any]:
+    """
+    构造传给 C++ 内核的 AI 配置 JSON。
+
+    CLI 与 GUI 共用这一份，避免两处漂移（以前只在 cli.py 里，GUI 会悄悄不一致）。
+    """
+    ai = ai_cfg if ai_cfg is not None else load_ai_config()
+    clam = (config or {}).get("clamav") or {}
+    return {
+        "base_url": ai.base_url,
+        "api_key": ai.api_key,
+        "model": ai.model,
+        "timeout": ai.timeout,
+        "max_rounds": ai.max_rounds,
+        "interval": ai.interval,
+        "max_events_per_batch": ai.max_events_per_batch,
+        "max_event_chars": ai.max_event_chars,
+        "max_tool_result_chars": ai.max_tool_result_chars,
+        "scan_analysis": ai.scan_analysis,
+        "batch_sources": ai.batch_sources(),
+        "rules_path": ((config or {}).get("yara") or {}).get("rules_path") or "",
+        "quarantine_dir": str(
+            resolve_path(((config or {}).get("quarantine") or {}).get("path", "./quarantine"))
+        ),
+        "clam_host": clam.get("host", "127.0.0.1"),
+        "clam_port": int(clam.get("port", 3310) or 3310),
+        "clam_timeout": int(clam.get("timeout", 30) or 30),
+        "log_file": str(LOG_FILE),
+        "dump_dir": str(AI_DUMP_DIR),
+        "project_root": str(PROJECT_ROOT),
+        "audit_log_file": str(LOG_DIR / "ai_audit.log"),
+        # 处置类工具默认 dry-run 开关：环境变量 AVENGINE_AI_DRY_RUN=1 可全局打开
+        "dry_run": os.environ.get("AVENGINE_AI_DRY_RUN", "").strip() in ("1", "true", "yes", "on"),
+    }

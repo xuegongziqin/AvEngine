@@ -19,19 +19,7 @@ using aiutil::to_utf8;
 
 namespace {
 
-const std::map<std::string, std::string>& sources() {
-    static const std::map<std::string, std::string> kSources = {
-        {"sysmon", "Microsoft-Windows-Sysmon/Operational"},
-        {"process", "Microsoft-Windows-Kernel-Process/Operational"},
-        {"network", "Microsoft-Windows-Kernel-Network/Operational"},
-        {"dns", "Microsoft-Windows-DNS-Client/Operational"},
-        {"powershell", "Microsoft-Windows-PowerShell/Operational"},
-        {"system", "System"},
-        {"application", "Application"},
-        {"fileio", "Microsoft-Windows-Kernel-File/Operational"},
-    };
-    return kSources;
-}
+// 事件源表已由下面的 source_chain() 统一维护（含回退链）
 
 std::string iso_utc(time_t t) {
     std::tm tmv{};
@@ -62,13 +50,20 @@ std::string attr(const std::string& xml, const char* tag, const char* attrib) {
     auto close = xml.find('>', a);
     if (close == std::string::npos) return "";
     std::string head = xml.substr(a, close - a);
-    std::string key = std::string(attrib) + "=\"";
-    auto k = head.find(key);
-    if (k == std::string::npos) return "";
-    k += key.size();
-    auto e = head.find('"', k);
-    if (e == std::string::npos) return "";
-    return xml_unescape(head.substr(k, e - k));
+    // 事件 XML 的属性可能是双引号，也可能是单引号（EvtRender 实际输出用单引号：
+    // <TimeCreated SystemTime='2026-...'/>、<Data Name='Image'>），两种都要认，
+    // 否则时间戳和 Sysmon 的字段名会全部丢成空。
+    const char quotes[2] = {'"', '\''};
+    for (char q : quotes) {
+        std::string key = std::string(attrib) + "=" + q;
+        auto k = head.find(key);
+        if (k == std::string::npos) continue;
+        k += key.size();
+        auto e = head.find(q, k);
+        if (e == std::string::npos) continue;
+        return xml_unescape(head.substr(k, e - k));
+    }
+    return "";
 }
 
 std::string inner_tag(const std::string& xml, const char* tag) {
@@ -81,22 +76,28 @@ std::string inner_tag(const std::string& xml, const char* tag) {
     return xml_unescape(xml.substr(a, b - a));
 }
 
-// 收集所有 <Data Name="x">v</Data>
+// 收集所有 <Data Name="x">v</Data>（属性引号单双兼容；没有 Name 的按 Data1/Data2 编号）
 void collect_data(const std::string& xml, std::vector<std::pair<std::string, std::string>>& out) {
     size_t pos = 0;
-    const std::string marker = "<Data Name=\"";
+    int unnamed = 0;
     while (true) {
-        auto p = xml.find(marker, pos);
+        auto p = xml.find("<Data", pos);
         if (p == std::string::npos) break;
-        auto name_b = p + marker.size();
-        auto name_e = xml.find('"', name_b);
-        if (name_e == std::string::npos) break;
-        auto gt = xml.find('>', name_e);
+        auto gt = xml.find('>', p);
         if (gt == std::string::npos) break;
+        if (gt > p && xml[gt - 1] == '/') {   // <Data/> 自闭合，跳过
+            pos = gt + 1;
+            continue;
+        }
         auto end = xml.find("</Data>", gt);
         if (end == std::string::npos) break;
-        std::string name = xml.substr(name_b, name_e - name_b);
+        std::string head = xml.substr(p, gt - p + 1);
+        std::string name = attr(head, "Data", "Name");
         std::string value = xml_unescape(xml.substr(gt + 1, end - gt - 1));
+        if (name.empty()) {
+            if (value.empty()) { pos = end + 7; continue; }
+            name = "Data" + std::to_string(++unnamed);
+        }
         out.emplace_back(name, value);
         pos = end + 7;
     }
@@ -104,7 +105,8 @@ void collect_data(const std::string& xml, std::vector<std::pair<std::string, std
 
 std::string shorten(const std::string& s, size_t maxlen) {
     if (s.size() <= maxlen) return s;
-    return s.substr(0, maxlen) + "...";
+    // 按字符边界截断：GBK/UTF-8 文本按字节切会劈开汉字，回传给模型的 JSON 会变成非法 UTF-8
+    return aiutil::utf8_truncate(s, maxlen) + "...";
 }
 
 // 把一条事件 XML 渲染为紧凑单行
@@ -193,15 +195,113 @@ QueryOutcome query_channel(const std::string& channel, const std::string& xpath,
     return out;
 }
 
-}  // namespace
+struct ChannelCandidate {
+    const char* channel;
+    int event_id;  // >0 时在 XPath 里加 EventID 过滤（回退到 Sysmon 时用）
+};
 
-bool ai_is_known_source(const std::string& source) {
-    return sources().count(source) > 0;
+/*
+ * 事件源 -> 通道候选链（按顺序尝试）。
+ *
+ * Win7 上根本没有 Microsoft-Windows-Kernel-Process/Network/File 这些内核通道
+ * （它们是 Win8+ 的），所以老系统上直接用主通道只会得到「通道未找到」。项目本身
+ * 会安装 Sysmon，因此回退到 Sysmon 的对应事件 ID；process 还能再退到安全日志
+ * 4688（需先开启审核策略）。
+ */
+const std::vector<ChannelCandidate>* source_chain(const std::string& source) {
+    static const std::map<std::string, std::vector<ChannelCandidate>> kChains = {
+        {"sysmon", {{"Microsoft-Windows-Sysmon/Operational", 0}}},
+        {"process",
+         {{"Microsoft-Windows-Kernel-Process/Operational", 0},
+          {"Microsoft-Windows-Sysmon/Operational", 1},
+          {"Security", 4688}}},
+        {"network",
+         {{"Microsoft-Windows-Kernel-Network/Operational", 0},
+          {"Microsoft-Windows-Sysmon/Operational", 3}}},
+        {"dns",
+         {{"Microsoft-Windows-DNS-Client/Operational", 0},
+          {"Microsoft-Windows-Sysmon/Operational", 22}}},
+        {"fileio",
+         {{"Microsoft-Windows-Kernel-File/Operational", 0},
+          {"Microsoft-Windows-Sysmon/Operational", 11}}},
+        {"powershell", {{"Microsoft-Windows-PowerShell/Operational", 0}}},
+        {"system", {{"System", 0}}},
+        {"application", {{"Application", 0}}},
+    };
+    auto it = kChains.find(source);
+    return it == kChains.end() ? nullptr : &it->second;
 }
 
+std::string build_xpath(const std::string& since, int event_id) {
+    if (event_id > 0)
+        return "*[System[(EventID=" + std::to_string(event_id) +
+               ") and TimeCreated[@SystemTime>='" + since + "']]]";
+    return "*[System[TimeCreated[@SystemTime>='" + since + "']]]";
+}
+
+struct ChainOutcome {
+    QueryOutcome outcome;
+    std::string channel_used;
+    bool fallback = false;
+    std::vector<std::string> tried;  // 每个候选的结果摘要（诊断用）
+};
+
+ChainOutcome query_source(const std::string& source, const std::string& since, int limit,
+                          bool reverse, const std::string& keyword) {
+    ChainOutcome res;
+    const std::vector<ChannelCandidate>* chain = source_chain(source);
+    if (!chain || chain->empty()) {
+        res.outcome.error = "未知事件源: " + source;
+        return res;
+    }
+    for (size_t i = 0; i < chain->size(); ++i) {
+        const ChannelCandidate& c = (*chain)[i];
+        std::string label = c.channel;
+        if (c.event_id > 0) label += " EventID=" + std::to_string(c.event_id);
+
+        QueryOutcome q = query_channel(c.channel, build_xpath(since, c.event_id), limit, reverse,
+                                       keyword);
+        if (!q.error.empty()) {
+            res.tried.push_back(label + " -> " + q.error);
+            continue;
+        }
+        if (q.lines.empty() && i + 1 < chain->size()) {
+            res.tried.push_back(label + " -> 窗口内无事件");
+            continue;   // 主通道没数据时，也值得看一眼 Sysmon
+        }
+        res.outcome = q;
+        res.channel_used = label;
+        res.fallback = (i > 0);
+        return res;
+    }
+    std::string joined;
+    for (size_t i = 0; i < res.tried.size(); ++i) {
+        if (i) joined += "；";
+        joined += res.tried[i];
+    }
+    res.outcome.error = "候选通道都不可用: " + joined;
+    return res;
+}
+
+std::string enable_hint(const std::string& source) {
+    const std::vector<ChannelCandidate>* chain = source_chain(source);
+    if (!chain || chain->empty()) return "";
+    std::string primary = chain->front().channel;
+    if (source == "process" || source == "network" || source == "fileio" || source == "dns")
+        return "\n（Windows 7 没有该内核通道；可用管理员执行 wevtutil sl \"" + primary +
+               "\" /e:true 尝试启用，或安装/启动 Sysmon 后重试——本工具会自动回退到 Sysmon 事件）";
+    if (source == "sysmon")
+        return "\n（Sysmon 通道不可用：确认 Sysmon 已安装并运行，sc query SysmonDrv）";
+    return "";
+}
+
+}  // namespace
+
+bool ai_is_known_source(const std::string& source) { return source_chain(source) != nullptr; }
+
 std::string ai_event_channel(const std::string& source) {
-    auto it = sources().find(source);
-    return it == sources().end() ? "" : it->second;
+    const std::vector<ChannelCandidate>* chain = source_chain(source);
+    return (chain && !chain->empty()) ? std::string(chain->front().channel) : std::string();
 }
 
 bool ai_events_supported() { return true; }
@@ -211,17 +311,20 @@ AiBatch ai_query_batch(const std::vector<std::string>& srcs, int minutes, int ma
     AiBatch batch;
     time_t now = std::time(nullptr);
     std::string since = iso_utc(now - static_cast<time_t>(minutes) * 60);
-    std::string xpath = "*[System[TimeCreated[@SystemTime>='" + since + "']]]";
 
     int per_source = std::max(5, max_events / std::max(1, static_cast<int>(srcs.size())));
     std::vector<std::string> all;
     for (const std::string& s : srcs) {
-        std::string channel = ai_event_channel(s);
-        if (channel.empty()) continue;
-        QueryOutcome q = query_channel(channel, xpath, per_source, true, "");
-        if (!q.error.empty()) batch.errors.push_back(q.error);
-        batch.stats.emplace_back(s, static_cast<int>(q.lines.size()));
-        for (auto& l : q.lines) all.push_back(render_event(l, max_chars));
+        if (!ai_is_known_source(s)) continue;
+        ChainOutcome cr = query_source(s, since, per_source, true, "");
+        if (!cr.outcome.error.empty()) {
+            batch.errors.push_back(cr.outcome.error);
+            batch.stats.emplace_back(s, 0);
+            continue;
+        }
+        batch.stats.emplace_back(s + (cr.fallback ? "(" + cr.channel_used + ")" : ""),
+                                 static_cast<int>(cr.outcome.lines.size()));
+        for (auto& l : cr.outcome.lines) all.push_back(render_event(l, max_chars));
     }
     if (static_cast<int>(all.size()) > max_events) {
         batch.truncated = static_cast<int>(all.size()) - max_events;
@@ -242,26 +345,37 @@ AiBatch ai_query_batch(const std::vector<std::string>& srcs, int minutes, int ma
 
 std::pair<std::string, std::string> ai_query_tool(const std::string& source, double hours,
                                                   int limit, const std::string& keyword) {
-    std::string channel = ai_event_channel(source);
-    if (channel.empty()) {
+    if (!ai_is_known_source(source)) {
         return {"", "未知事件源: " + source};
     }
     if (hours <= 0) hours = 0.01;
     time_t now = std::time(nullptr);
     std::string since = iso_utc(now - static_cast<time_t>(hours * 3600));
-    std::string xpath = "*[System[TimeCreated[@SystemTime>='" + since + "']]]";
 
-    QueryOutcome q = query_channel(channel, xpath, limit, true, keyword);
+    ChainOutcome cr = query_source(source, since, limit, true, keyword);
+    if (!cr.outcome.error.empty()) {
+        return {"", cr.outcome.error + enable_hint(source)};
+    }
+
     std::string text;
-    if (q.lines.empty()) {
-        text = "（无匹配事件）";
+    if (cr.fallback)
+        text = "（主通道不可用，已回退到 " + cr.channel_used + "）\n";
+    if (cr.outcome.lines.empty()) {
+        text += "（无匹配事件）";
+        if (!cr.tried.empty()) {
+            text += "\n尝试过的通道: ";
+            for (size_t i = 0; i < cr.tried.size(); ++i) {
+                if (i) text += "；";
+                text += cr.tried[i];
+            }
+        }
     } else {
-        for (size_t i = 0; i < q.lines.size(); ++i) {
+        for (size_t i = 0; i < cr.outcome.lines.size(); ++i) {
             if (i) text += "\n";
-            text += q.lines[i];
+            text += cr.outcome.lines[i];
         }
     }
-    return {text, q.error};
+    return {text, ""};
 }
 
 std::string ai_get_event_xml(const std::string& source, long long record_id, std::string& err) {

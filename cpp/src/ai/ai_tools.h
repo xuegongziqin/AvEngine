@@ -16,6 +16,8 @@ struct AiContext {
     std::string dump_dir;
     std::string project_root;
     int max_tool_result_chars = 12000;
+    bool dry_run = false;          // 处置类工具默认按 dry-run 执行（只报告不改系统）
+    std::string audit_log_file;    // 操作审计日志（追加式 + 哈希链，防篡改）
 };
 
 // tools 数组（OpenAI function calling 格式）

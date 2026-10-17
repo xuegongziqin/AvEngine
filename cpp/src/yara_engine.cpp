@@ -1,7 +1,10 @@
 // yara_engine.cpp - libyara 扫描封装
 #include "yara_engine.h"
 
+#include "ai/ai_util.h"   // aiutil::to_wide_path / to_utf8：非 ASCII 路径支持
+
 #include <yara.h>
+#include <windows.h>
 
 #include <algorithm>
 #include <cctype>
@@ -55,7 +58,9 @@ static YR_COMPILER* compile_files(const std::vector<std::string>& files,
         return nullptr;
     }
     for (const auto& path : files) {
-        std::FILE* fp = std::fopen(path.c_str(), "rb");
+        // 规则文件也要能是中文路径：std::fopen 在 Windows 上按 ANSI 解码，
+        // 必须用 _wfopen + UTF-8 转宽字符（见 aiutil::to_wide_path）。
+        std::FILE* fp = _wfopen(aiutil::to_wide_path(path).c_str(), L"rb");
         if (!fp) {
             errored.push_back(path);
             continue;
@@ -74,7 +79,10 @@ YaraEngine::YaraEngine(const std::string& rules_path) {
         error_ = "未配置规则目录";
         return;
     }
-    if (!fs::is_directory(rules_path)) {
+    // 规则目录同样按 UTF-8 -> 宽字符：fs::path 从 char* 构造在 Windows 上走 ANSI 代码页，
+    // 中文目录会被判成"不存在"。
+    const fs::path rules_dir(aiutil::to_wide_path(rules_path));
+    if (!fs::is_directory(rules_dir)) {
         error_ = "规则目录不存在: " + rules_path;
         return;
     }
@@ -85,14 +93,16 @@ YaraEngine::YaraEngine(const std::string& rules_path) {
     std::vector<std::string> files;
     {
         std::error_code ec;
-        for (auto it = fs::recursive_directory_iterator(rules_path, ec);
+        for (auto it = fs::recursive_directory_iterator(rules_dir, ec);
              it != fs::recursive_directory_iterator(); it.increment(ec)) {
             if (ec) break;
             if (!it->is_regular_file(ec)) continue;
-            std::string ext = it->path().extension().string();
+            std::wstring wext = it->path().extension().wstring();
+            std::string ext = aiutil::to_utf8(wext);
             for (auto& ch : ext) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
             if (ext != ".yar" && ext != ".yara") continue;
-            files.push_back(it->path().string());
+            // 路径统一以 UTF-8 保存：下游用 to_wide_path 转回去，往返一致。
+            files.push_back(aiutil::to_utf8(it->path().wstring()));
         }
     }
     std::sort(files.begin(), files.end());
@@ -156,8 +166,33 @@ YaraEngine::~YaraEngine() {
 std::vector<std::string> YaraEngine::scan_file(const std::string& path) const {
     std::vector<std::string> hits;
     if (!available_ || !rules_) return hits;
-    int rc = yr_rules_scan_file(static_cast<YR_RULES*>(rules_), path.c_str(), 0,
-                                scan_callback, &hits, 0);
+    /*
+     * 不能用 yr_rules_scan_file：libyara 内部按窄路径 fopen（Windows 上是 ANSI 代码页），
+     * 中文/日文等非 ASCII 路径会直接打不开 —— 扫描不出结论却是"干净"，最危险的那种失败。
+     * 改成自己用 CreateFileW 打开（UTF-8 -> 宽字符），再把句柄交给 yr_rules_scan_fd：
+     * libyara 只做映射读，不会重新按路径开文件，也不接管这个句柄的所有权。
+     */
+    HANDLE h = CreateFileW(aiutil::to_wide_path(path).c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        // 打不开就退回内存扫描的语义：返回空结果（调用方另有 sha256/熵等信息可判断）
+        return hits;
+    }
+    int rc = yr_rules_scan_fd(static_cast<YR_RULES*>(rules_), h, 0, scan_callback, &hits, 0);
+    CloseHandle(h);
+    if (rc != ERROR_SUCCESS) {
+        return hits;
+    }
+    return hits;
+}
+
+std::vector<std::string> YaraEngine::scan_memory(const unsigned char* data, size_t len) const {
+    std::vector<std::string> hits;
+    if (!available_ || !rules_ || !data || len == 0) return hits;
+    int rc = yr_rules_scan_mem(static_cast<YR_RULES*>(rules_),
+                               reinterpret_cast<const uint8_t*>(data),
+                               static_cast<size_t>(len), 0, scan_callback, &hits, 0);
     if (rc != ERROR_SUCCESS) {
         return hits;
     }

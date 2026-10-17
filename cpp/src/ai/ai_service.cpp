@@ -4,6 +4,7 @@
 #include "ai_client.h"
 #include "ai_collectors.h"
 #include "ai_prompts.h"
+#include "ai_util.h"
 
 #include <atomic>
 #include <chrono>
@@ -24,9 +25,16 @@ json session_cfg(const AiServiceConfig& cfg) {
                 {"max_tool_result_chars", cfg.max_tool_result_chars}};
 }
 
-json run_with_message(const AiServiceConfig& cfg, const std::string& message) {
+json run_with_message(const AiServiceConfig& cfg, const std::string& message,
+                      const AiEventFn* on_event, const char* mode) {
     AiContext ctx = cfg.ctx;  // 每会话独立（拷贝）
-    AiSessionResult r = ai_run_session(session_cfg(cfg), message, ctx);
+    AiSessionHooks hooks;
+    if (on_event) {
+        hooks.on_event = *on_event;
+        // 先告诉 UI 这次是什么任务，便于显示标题
+        hooks.on_event({{"kind", "session_info"}, {"mode", mode ? mode : ""}});
+    }
+    AiSessionResult r = ai_run_session(session_cfg(cfg), message, ctx, on_event ? &hooks : nullptr);
     return ai_session_to_json(r);
 }
 
@@ -50,7 +58,7 @@ void bg_loop() {
         try {
             json result = ai_service_run_batch(g_bg.cfg, std::max(1, g_bg.cfg.interval / 60));
             std::lock_guard<std::mutex> lk(g_bg.mtx);
-            g_bg.results.push_back(result.dump());
+            g_bg.results.push_back(aiutil::dump_json(result));
             if (g_bg.results.size() > 100) g_bg.results.erase(g_bg.results.begin());
         } catch (const std::exception& e) {
             std::lock_guard<std::mutex> lk(g_bg.mtx);
@@ -88,6 +96,14 @@ AiServiceConfig ai_parse_config(const json& j) {
     cfg.ctx.dump_dir = j.value("dump_dir", "");
     cfg.ctx.project_root = j.value("project_root", "");
     cfg.ctx.max_tool_result_chars = cfg.max_tool_result_chars;
+    cfg.ctx.dry_run = j.value("dry_run", false);
+    cfg.ctx.audit_log_file = j.value("audit_log_file", "");
+    if (cfg.ctx.audit_log_file.empty() && !cfg.ctx.log_file.empty()) {
+        // 默认放在引擎日志同目录：logs\ai_audit.log
+        size_t slash = cfg.ctx.log_file.find_last_of("\\/");
+        if (slash != std::string::npos)
+            cfg.ctx.audit_log_file = cfg.ctx.log_file.substr(0, slash + 1) + "ai_audit.log";
+    }
     return cfg;
 }
 
@@ -101,32 +117,34 @@ json ai_session_to_json(const AiSessionResult& r) {
                 {"trace", r.trace}};
 }
 
-json ai_service_run_batch(const AiServiceConfig& cfg, int minutes) {
+json ai_service_run_batch(const AiServiceConfig& cfg, int minutes, const AiEventFn* on_event) {
     AiBatch batch = ai_query_batch(cfg.batch_sources, minutes, cfg.max_events_per_batch,
                                    cfg.max_event_chars);
     std::string message = aiprompts::build_batch_message(batch.text, batch.stats, batch.truncated,
                                                          batch.errors, minutes);
-    json result = run_with_message(cfg, message);
+    json result = run_with_message(cfg, message, on_event, "batch");
     result["kind"] = "batch";
     result["minutes"] = minutes;
     return result;
 }
 
-json ai_service_ask(const AiServiceConfig& cfg, const std::string& question) {
+json ai_service_ask(const AiServiceConfig& cfg, const std::string& question,
+                    const AiEventFn* on_event) {
     std::string message = aiprompts::build_ask_context("Sysmon/事件采集可用") + "\n\n用户问题: " + question;
-    json result = run_with_message(cfg, message);
+    json result = run_with_message(cfg, message, on_event, "ask");
     result["kind"] = "ask";
     return result;
 }
 
-json ai_service_analyze_detection(const AiServiceConfig& cfg, const json& detection) {
+json ai_service_analyze_detection(const AiServiceConfig& cfg, const json& detection,
+                                  const AiEventFn* on_event) {
     std::string path = detection.value("path", "");
     std::string engine = detection.value("engine", "");
     std::string match = detection.value("match", "");
     std::string action = detection.value("action", "");
     int total = detection.value("total", 0);
     std::string message = aiprompts::build_detection_message(path, engine, match, action, total);
-    json result = run_with_message(cfg, message);
+    json result = run_with_message(cfg, message, on_event, "detection");
     result["kind"] = "detection";
     return result;
 }

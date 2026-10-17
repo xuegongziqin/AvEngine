@@ -87,6 +87,24 @@ AVC_API char* avc_ai_run_batch(const char* config_json, int minutes);
 AVC_API char* avc_ai_ask(const char* config_json, const char* question);
 AVC_API char* avc_ai_analyze_detection(const char* config_json, const char* detection_json);
 
+/*
+ * 流式事件回调：会话进行中同步回调（与调用线程相同），event_json 为 UTF-8 JSON 对象，
+ * 生命周期仅限本次回调，需要保留请自行拷贝。事件 kind 见 ai_session.h 的 AiSessionHooks 注释：
+ *   session_info/session_start/round_start/thinking/content/tool_call/tool_result/round_end/
+ *   note/error/final/done
+ * 回调里不要长阻塞（会拖慢会话）；抛出的异常由实现方吞掉，不影响会话。
+ * user 原样回传，可用于传 Python 侧的对象指针。
+ */
+typedef void (*avc_ai_event_cb)(const char* event_json, void* user);
+
+/* 与上面三个函数语义完全一致，只是额外把过程中的增量通过 cb 实时抛出来 */
+AVC_API char* avc_ai_ask_stream(const char* config_json, const char* question,
+                                avc_ai_event_cb cb, void* user);
+AVC_API char* avc_ai_run_batch_stream(const char* config_json, int minutes,
+                                      avc_ai_event_cb cb, void* user);
+AVC_API char* avc_ai_analyze_detection_stream(const char* config_json, const char* detection_json,
+                                              avc_ai_event_cb cb, void* user);
+
 /* 后台定时批次线程（每 interval 秒一次）；成功返回 0 */
 AVC_API int avc_ai_start_background(const char* config_json);
 AVC_API void avc_ai_stop_background(void);

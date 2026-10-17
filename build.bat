@@ -122,6 +122,35 @@ if errorlevel 1 (
   echo   [ERROR] copying bina\ failed  ^(Sysmon / ClamAV installer^)
   goto :fail
 )
+rem ---- SECURITY: never ship signing secrets ----
+rem bina\signing\ holds the self-signed code-signing PFX (private key) and the password
+rem lives in service\passwd.txt; neither may travel with a release that gets copied to
+rem other machines. Drop them and then FAIL if anything key-like survived.
+if exist "%REL%\bina\signing" rmdir /s /q "%REL%\bina\signing"
+if exist "%REL%\service\passwd.txt"   del /f /q "%REL%\service\passwd.txt"
+if exist "%REL%\service\generated"    rmdir /s /q "%REL%\service\generated"
+if exist "%REL%\service\signing.json" del /f /q "%REL%\service\signing.json"
+del /f /q "%REL%\bina\*.pfx" "%REL%\bina\*.pvk" "%REL%\bina\*.key" "%REL%\bina\*.cer" >nul 2>nul
+if exist "%REL%\bina\signing" (
+  echo   [ERROR] %REL%\bina\signing still exists
+  goto :fail
+)
+if exist "%REL%\bina\*.pfx" (
+  echo   [ERROR] signing private key left in the release ^(*.pfx^)
+  goto :fail
+)
+if exist "%REL%\bina\*.pvk" (
+  echo   [ERROR] signing private key left in the release ^(*.pvk^)
+  goto :fail
+)
+if exist "%REL%\bina\*.key" (
+  echo   [ERROR] signing private key left in the release ^(*.key^)
+  goto :fail
+)
+if exist "%REL%\bina\*.cer" (
+  echo   [ERROR] signing certificate left in the release ^(*.cer^)
+  goto :fail
+)
 xcopy /e /i /y /q "%ROOT%scripts\*" "%REL%\scripts\" >nul
 if errorlevel 1 (
   echo   [ERROR] copying scripts\ failed
@@ -167,6 +196,44 @@ if exist "%REL%\quarantine"  rmdir /s /q "%REL%\quarantine"
 if exist "%REL%\config.yaml" del /f /q "%REL%\config.yaml"
 if exist "%REL%\config.ini"  del /f /q "%REL%\config.ini"
 
+rem ============ [extra] privileged service + signing (best effort, never fails the build) ====
+call "%ROOT%service\build_service.bat"
+if errorlevel 1 (
+    echo   [WARN] privilege service not built ^(needs MSVC / VS developer environment^)
+    echo   [WARN] AI SYSTEM-privilege features will be unavailable
+) else (
+    if exist "%REL%\service" rmdir /s /q "%REL%\service"
+    mkdir "%REL%\service" >nul 2>nul
+    copy /y "%ROOT%service\bin\AvEnginePrivSvc.exe" "%REL%\service\" >nul 2>nul
+    copy /y "%ROOT%service\priv_protocol.h" "%REL%\service\" >nul 2>nul
+)
+
+echo [extra] signing ^(skipped with a notice when there is no certificate / signtool^)
+rem NOTE: multiple files must use the array form ("a","b"). Writing  -Files a b  binds the
+rem second path to -SigningJson, which then fails to parse the DLL as JSON.
+rem
+rem Once a certificate pin exists (service\generated\cert_pin.h), signing is MANDATORY for a
+rem releasable build: the service denies unsigned callers, so shipping unsigned binaries just
+rem fails on the target machine. Pass -Require and fail the build here.
+set "SIGNREQ="
+if exist "%ROOT%service\generated\cert_pin.h" set "SIGNREQ=-Require"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\sign_binaries.ps1" -Files "%REL%\avengine.exe","%REL%\avengine\_native\avengine_core.dll" %SIGNREQ%
+if errorlevel 1 (
+    echo   [ERROR] signing failed while a certificate pin is configured
+    echo   [ERROR] the privileged service would REJECT these binaries on the target machine
+    echo   [ERROR] fix access, then re-sign ^(no service rebuild needed^):
+    echo   [ERROR]   powershell -ExecutionPolicy Bypass -File scripts\grant_signing_access.ps1
+    goto :fail
+)
+if exist "%REL%\service\AvEnginePrivSvc.exe" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\sign_binaries.ps1" -Files "%REL%\service\AvEnginePrivSvc.exe" %SIGNREQ%
+    if errorlevel 1 (
+        echo   [ERROR] signing failed for service\AvEnginePrivSvc.exe
+        goto :fail
+    )
+)
+
 echo.
 echo ============================================================
 echo  BUILD OK
@@ -176,6 +243,7 @@ echo  Run it         : cd into that folder, then  avengine.exe status
 echo  Win7 deploy    : double-click  deploy_win7.bat  in that folder
 echo  Sysmon / ClamAV: run  scripts\install.bat  as Administrator
 echo  AI             : copy config.ini.example to config.ini, set api_key
+echo  SYSTEM helper  : see README section 15 (generate the certificate once, then rebuild)
 echo ============================================================
 exit /b 0
 

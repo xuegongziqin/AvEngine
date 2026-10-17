@@ -64,8 +64,8 @@ echo --------------------------------------------
 echo.
 echo ClamAV on Windows 7:
 echo   ClamAV 1.x is not supported on Windows 7. AvEngine talks to clamd over TCP only.
-echo   * YARA only (no ClamAV):  scripts\set_clamav.ps1 -ClamdHost none
-echo   * clamd on the LAN:       scripts\set_clamav.ps1 -ClamdHost ^<ip^>
+echo   * YARA only (no ClamAV):  scripts\set_clamav.bat -ClamdHost none
+echo   * clamd on the LAN:       scripts\set_clamav.bat -ClamdHost ^<ip^>
 echo   Then re-run: avengine.exe status
 echo.
 echo Deployment check finished.

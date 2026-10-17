@@ -19,6 +19,60 @@ from .paths import resolve_path
 
 # -------------------- 日志设置 --------------------
 
+class SafeStreamHandler(logging.StreamHandler):
+    """
+    写控制台失败时**不要**把 traceback 打到用户脸上。
+
+    logging 的默认行为是 emit 出异常就 print 一段 "--- Logging error ---" + traceback，
+    这对命令行工具来说纯属噪音（真实场景：控制台代码页/句柄/重定向被别的程序改过，
+    或者某个字符在当前代码页里编不出来）。这里降级为"替换不可编码字符再写一次"，
+    仍然失败就丢掉这一条控制台输出——文件 handler 不受影响。
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:   # noqa: D102
+        # 注意：不能包一层 super().emit() —— logging.StreamHandler.emit 自己就把异常
+        # 吞掉并调用 handleError 了，那样"替换字符后重试"的降级分支永远不会执行。
+        try:
+            msg = self.format(record)
+        except Exception:
+            return
+        try:
+            self.stream.write(msg + self.terminator)
+            self.flush()
+            return
+        except Exception:
+            pass
+        try:
+            stream = self.stream
+            encoding = getattr(stream, "encoding", None) or "utf-8"
+            safe = msg.encode(encoding, "replace").decode(encoding, "replace")
+            stream.write(safe + self.terminator)
+            self.flush()
+        except Exception:
+            self.handleError(record)
+
+    def handleError(self, record: logging.LogRecord) -> None:   # noqa: D102
+        # logging 默认在这里 print traceback，直接沉默
+        return
+
+
+def make_console_tolerant() -> None:
+    """
+    把标准流设成 errors="replace"，让不可编码字符变成 '?' 而不是抛 UnicodeEncodeError。
+
+    必须在 colorama 包装之前对**原始流**做（sys.__stdout__/__stderr__），
+    否则包装对象的 write 仍会走到会抛异常的那条路。
+    """
+    for name in ("__stdout__", "__stderr__", "stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(errors="replace")
+            except Exception:
+                pass
+
+
 def setup_logging(
     log_level: int = logging.INFO,
     log_file: Optional[Path] = None,
@@ -35,7 +89,7 @@ def setup_logging(
         date_format: 时间格式。
     """
     formatter = logging.Formatter(log_format, datefmt=date_format)
-    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    handlers: list[logging.Handler] = [SafeStreamHandler(sys.stdout)]
 
     if log_file:
         path = resolve_path(log_file)

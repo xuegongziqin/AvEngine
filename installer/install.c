@@ -5,7 +5,7 @@
  *   1. Locate the project root and create runtime dirs (logs/, quarantine/)
  *   2. Check administrator privileges (required by the ClamAV service and Sysmon)
  *   3. Python environment: create venv, install requirements.txt / requirements-dev.txt
- *      (yara-python, pyclamd, pywin32, colorama, PyYAML, pytest)
+ *      (colorama, PyYAML; pytest for the dev extra)
  *   4. ClamAV: install bina\clamav.msi -> write configs -> freshclam signature update
  *      -> register + start the "clamd" Windows service
  *   5. Sysmon: install/update using scripts\sysmon_config.xml
@@ -162,6 +162,9 @@ static int is_dir(const wchar_t *path)
     return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY);
 }
 
+/* defined later in this file (needs registry access) */
+static void get_windows_version(int *major, int *minor);
+
 /*
  * Wide string helpers.
  * The wide printf family (swprintf) is deliberately NOT used for paths and
@@ -196,6 +199,65 @@ static int wjoin(wchar_t *dst, size_t cap,
     }
     dst[used] = L'\0';
     return 1;
+}
+
+/*
+ * Pick the ClamAV installer package for this machine. Same rule as
+ * avengine/paths.py clamav_msi() and scripts/setup_clamav.ps1:
+ *
+ *   Windows 8.1+                    -> bina\clamav.msi       (modern 1.x)
+ *   Windows 7 SP1 / Server 2008 R2  -> bina\clamwin7\*.msi   (last build supporting Win7)
+ *
+ * Any *.msi inside the version-appropriate directory is accepted, so the user can drop
+ * a differently named package there. Falls back to the other directory when the expected
+ * one holds no *.msi. Needs wjoin, so it lives after it.
+ */
+static int first_msi_in(const wchar_t *dir, wchar_t *out, size_t cap)
+{
+    WIN32_FIND_DATAW fd;
+    HANDLE h;
+    wchar_t pattern[MAX_PATH];
+
+    if (!dir || !dir[0]) return 0;
+    if (!wjoin(pattern, MAX_PATH, dir, L"\\*.msi", NULL, NULL, NULL)) return 0;
+    h = FindFirstFileW(pattern, &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            int ok = wjoin(out, cap, dir, L"\\", fd.cFileName, NULL, NULL);
+            FindClose(h);
+            return ok;
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return 0;
+}
+
+static int pick_clamav_msi(const wchar_t *root, wchar_t *out, size_t cap)
+{
+    int major = 0, minor = 0;
+    wchar_t modern_dir[MAX_PATH];
+    wchar_t legacy_dir[MAX_PATH];
+    const wchar_t *first;
+    const wchar_t *second;
+
+    get_windows_version(&major, &minor);
+    if (!wjoin(modern_dir, MAX_PATH, root, L"\\bina", NULL, NULL, NULL) ||
+        !wjoin(legacy_dir, MAX_PATH, root, L"\\bina\\clamwin7", NULL, NULL, NULL))
+        return 0;
+
+    /* 6.0 (Vista/2008) and 6.1 (7/2008 R2) need the legacy package */
+    if (major == 6 && minor <= 1) {
+        first = legacy_dir;
+        second = modern_dir;
+    } else {
+        first = modern_dir;
+        second = legacy_dir;
+    }
+    if (first_msi_in(first, out, cap)) return 1;
+    if (first_msi_in(second, out, cap)) return 1;
+    /* nothing found: report the expected location so the error is actionable */
+    return wjoin(out, cap, modern_dir, L"\\clamav.msi", NULL, NULL, NULL);
 }
 
 #define NARROW_SLOTS 4
@@ -591,10 +653,10 @@ static int step_python(void)
                g_root, L"\\requirements.txt\""))
         return STATUS_FAIL;
     if (!run_ok(cmd, g_root, 0)) {
-        print_status(STATUS_FAIL, "runtime dependency install failed (yara-python/pyclamd/pywin32)");
+        print_status(STATUS_FAIL, "runtime dependency install failed (colorama / PyYAML)");
         return STATUS_FAIL;
     }
-    print_status(STATUS_OK, "installed requirements.txt (yara-python, pyclamd, pywin32, ...)");
+    print_status(STATUS_OK, "installed requirements.txt (colorama, PyYAML)");
 
     if (!wjoin(cmd, CMD_LEN, L"\"", venv_py, L"\" -m pip install -r \"",
                g_root, L"\\requirements-dev.txt\""))
@@ -609,6 +671,30 @@ static int step_python(void)
 }
 
 /* ---------------- step 4: ClamAV ---------------- */
+
+/*
+ * ClamAV 的安装目录：64 位包在 %ProgramFiles%\ClamAV，32 位包在
+ * %ProgramFiles(x86)%\ClamAV。优先返回已经真实存在 clamd.exe 的那个。
+ */
+static int resolve_clamav_dir(wchar_t *clamav_dir, size_t cap,
+                              const wchar_t *program_files)
+{
+    wchar_t probe[MAX_PATH];
+    wchar_t pf86[MAX_PATH];
+
+    if (wjoin(probe, MAX_PATH, program_files, L"\\ClamAV\\clamd.exe",
+              NULL, NULL, NULL) &&
+        path_exists(probe))
+        return wjoin(clamav_dir, cap, program_files, L"\\ClamAV", NULL, NULL, NULL);
+
+    if (GetEnvironmentVariableW(L"ProgramFiles(x86)", pf86, MAX_PATH) &&
+        wjoin(probe, MAX_PATH, pf86, L"\\ClamAV\\clamd.exe", NULL, NULL, NULL) &&
+        path_exists(probe))
+        return wjoin(clamav_dir, cap, pf86, L"\\ClamAV", NULL, NULL, NULL);
+
+    /* 还没装：返回默认位置，仅用于报错路径显示 */
+    return wjoin(clamav_dir, cap, program_files, L"\\ClamAV", NULL, NULL, NULL);
+}
 
 static int write_clamav_configs(const wchar_t *clamav_dir, int port)
 {
@@ -668,14 +754,23 @@ static int write_clamav_configs(const wchar_t *clamav_dir, int port)
 
 static int ensure_clamd_service(const wchar_t *clamd_exe, const wchar_t *clamd_conf)
 {
+    /*
+     * ImagePath 必须带上 --daemon --service-mode（ClamAV 官方 --install-service 就是这么写的）：
+     *   --daemon       让 clamd 向 SCM 注册控制处理程序并上报启动进度
+     *   --service-mode 加载完病毒库后上报 SERVICE_RUNNING
+     * 少了这两个参数，进程不会和 SCM 握手，`net start clamd` 会以
+     * 1053「服务没有及时响应启动或控制请求」失败，而同一个 exe 前台运行却完全正常。
+     */
     if (g_dry_run) {
-        log_printf("> (dry-run) register Windows service \"clamd\" -> \"%s\" --config-file=\"%s\"\n",
+        log_printf("> (dry-run) register Windows service \"clamd\" -> \"%s\" "
+                   "--daemon --service-mode --config-file=\"%s\"\n",
                    narrow(clamd_exe), narrow(clamd_conf));
         return 1;
     }
 
     wchar_t binpath[CMD_LEN];
-    if (!wjoin(binpath, CMD_LEN, L"\"", clamd_exe, L"\" --config-file=\"",
+    if (!wjoin(binpath, CMD_LEN, L"\"", clamd_exe,
+               L"\" --daemon --service-mode --config-file=\"",
                clamd_conf, L"\""))
         return 0;
 
@@ -689,12 +784,12 @@ static int ensure_clamd_service(const wchar_t *clamd_exe, const wchar_t *clamd_c
     if (svc) {
         if (ChangeServiceConfigW(svc, SERVICE_NO_CHANGE, SERVICE_AUTO_START,
                                  SERVICE_NO_CHANGE, binpath, NULL, NULL,
-                                 NULL, NULL, NULL, L"ClamAV Daemon"))
-            print_status(STATUS_OK, "updated clamd service (auto start)");
+                                 NULL, NULL, NULL, L"ClamAV ClamD"))
+            print_status(STATUS_OK, "updated clamd service (auto start, service-mode args)");
         else
             print_status(STATUS_WARN, "cannot update service config (%lu)", GetLastError());
     } else {
-        svc = CreateServiceW(scm, L"clamd", L"ClamAV Daemon", SERVICE_ALL_ACCESS,
+        svc = CreateServiceW(scm, L"clamd", L"ClamAV ClamD", SERVICE_ALL_ACCESS,
                              SERVICE_WIN32_OWN_PROCESS, SERVICE_AUTO_START,
                              SERVICE_ERROR_NORMAL, binpath,
                              NULL, NULL, NULL, NULL, NULL);
@@ -703,7 +798,7 @@ static int ensure_clamd_service(const wchar_t *clamd_exe, const wchar_t *clamd_c
             CloseServiceHandle(scm);
             return 0;
         }
-        print_status(STATUS_OK, "created clamd service (auto start)");
+        print_status(STATUS_OK, "created clamd service (auto start, service-mode args)");
     }
 
     SERVICE_STATUS_PROCESS status;
@@ -741,7 +836,9 @@ static int ensure_clamd_service(const wchar_t *clamd_exe, const wchar_t *clamd_c
         print_status(STATUS_OK, "clamd service running (127.0.0.1:3310)");
         return 1;
     }
-    print_status(STATUS_WARN, "clamd service not running, check Program Files\\ClamAV\\clamd.log");
+    print_status(STATUS_WARN,
+                 "clamd service not running: check clamd.log in the ClamAV install dir "
+                 "(missing database, or port 3310 already taken by a foreground clamd?)");
     return 0;
 }
 
@@ -760,31 +857,44 @@ static int step_clamav(void)
     n = GetEnvironmentVariableW(L"ProgramFiles", program_files, MAX_PATH);
     if (n == 0 || n >= MAX_PATH)
         wcscpy(program_files, L"C:\\Program Files");
-    if (!wjoin(clamav_dir, MAX_PATH, program_files, L"\\ClamAV", NULL, NULL, NULL) ||
+    if (!resolve_clamav_dir(clamav_dir, MAX_PATH, program_files) ||
         !wjoin(clamd_exe, MAX_PATH, clamav_dir, L"\\clamd.exe", NULL, NULL, NULL) ||
         !wjoin(clamd_conf, MAX_PATH, clamav_dir, L"\\clamd.conf", NULL, NULL, NULL) ||
         !wjoin(freshclam_exe, MAX_PATH, clamav_dir, L"\\freshclam.exe", NULL, NULL, NULL) ||
         !wjoin(db_dir, MAX_PATH, clamav_dir, L"\\db", NULL, NULL, NULL) ||
-        !wjoin(msi, MAX_PATH, g_root, L"\\bina\\clamav.msi", NULL, NULL, NULL))
+        !pick_clamav_msi(g_root, msi, MAX_PATH))
         return STATUS_FAIL;
 
     /* 1) install MSI */
     if (!path_exists(clamd_exe)) {
         if (!path_exists(msi)) {
             print_status(STATUS_FAIL, "missing installer: %s", narrow(msi));
-            print_status(STATUS_FAIL, "download the Windows package from %s -> bina\\clamav.msi",
+            print_status(STATUS_FAIL, "put the package in bina\\clamav.msi (Win8.1+) or "
+                                      "bina\\clamwin7\\*.msi (Win7 SP1); download: %s",
                          CLAMAV_URL);
             return STATUS_FAIL;
         }
-        print_status(STATUS_OK, "installing ClamAV (msiexec /quiet)...");
-        if (!wjoin(cmd, CMD_LEN, L"msiexec.exe /i \"", msi, L"\" /quiet /norestart",
-                   NULL, NULL))
+        print_status(STATUS_OK, "installing ClamAV from %s (msiexec /qn, log in %%TEMP%%)...",
+                     narrow(msi));
+        wchar_t msi_log[MAX_PATH];
+        if (!GetEnvironmentVariableW(L"TEMP", msi_log, MAX_PATH))
+            wcscpy(msi_log, L"C:\\Windows\\Temp");
+        if (!wjoin(msi_log, MAX_PATH, msi_log, L"\\clamav_msi.log", NULL, NULL, NULL))
             return STATUS_FAIL;
-        if (!run_ok(cmd, g_root, 1))
-            print_status(STATUS_WARN, "msiexec returned non-zero, checking install dir...");
+        if (!wjoin(cmd, CMD_LEN, L"msiexec.exe /i \"", msi,
+                   L"\" /qn /norestart /l*v \"", msi_log, L"\""))
+            return STATUS_FAIL;
+        DWORD msi_code = 1;
+        /* 0=成功 3010/1641=需重启 1638=已装其它版本；只要 clamd.exe 出现就算可用 */
+        if (run_cmd(cmd, g_root, &msi_code, 1) && msi_code != 0)
+            print_status(STATUS_WARN, "msiexec exit code %lu (3010/1641/1638 are tolerable)",
+                         msi_code);
         if (!path_exists(clamd_exe)) {
             print_status(STATUS_FAIL, "ClamAV install failed, %s not found",
                          narrow(clamd_exe));
+            print_status(STATUS_FAIL, "msiexec log: %s", narrow(msi_log));
+            print_status(STATUS_FAIL,
+                         "you can install the MSI by hand and rerun this installer");
             return STATUS_FAIL;
         }
         print_status(STATUS_OK, "ClamAV installed: %s", narrow(clamav_dir));
@@ -848,27 +958,164 @@ static int reg_key_exists(HKEY root, const wchar_t *subkey)
     return 0;
 }
 
+/* Windows version as (major, minor).
+
+   CurrentMajorVersionNumber only exists on Windows 10+; older systems keep
+   "6.1" / "6.3" in CurrentVersion. Reading the registry avoids the manifest
+   lie that makes GetVersionEx report 6.2 on Windows 10. Mirrors
+   scripts/lib_sysmon.ps1 and avengine/paths.py windows_version(). */
+static void get_windows_version(int *major, int *minor)
+{
+    HKEY h;
+    *major = 0;
+    *minor = 0;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                      0, KEY_READ, &h) == ERROR_SUCCESS) {
+        DWORD type = 0;
+        DWORD value = 0;
+        DWORD size = sizeof(value);
+        if (RegQueryValueExW(h, L"CurrentMajorVersionNumber", NULL, &type,
+                             (LPBYTE)&value, &size) == ERROR_SUCCESS &&
+            type == REG_DWORD) {
+            *major = (int)value;
+            size = sizeof(value);
+            if (RegQueryValueExW(h, L"CurrentMinorVersionNumber", NULL, &type,
+                                 (LPBYTE)&value, &size) == ERROR_SUCCESS &&
+                type == REG_DWORD)
+                *minor = (int)value;
+        } else {
+            wchar_t text[64];
+            size = sizeof(text);
+            if (RegQueryValueExW(h, L"CurrentVersion", NULL, &type,
+                                 (LPBYTE)text, &size) == ERROR_SUCCESS) {
+                int a = 0, b = 0;
+                if (swscanf(text, L"%d.%d", &a, &b) >= 2) {
+                    *major = a;
+                    *minor = b;
+                }
+            }
+        }
+        RegCloseKey(h);
+    }
+}
+
+/* "x64" / "ARM64" / "x86" for the native architecture, even from a 32-bit
+   process (mirrors native_arch() in avengine/paths.py). */
+static const char *native_arch_name(void)
+{
+    SYSTEM_INFO si;
+    GetNativeSystemInfo(&si);
+    switch (si.wProcessorArchitecture) {
+    case PROCESSOR_ARCHITECTURE_AMD64:
+        return "x64";
+    case PROCESSOR_ARCHITECTURE_ARM64:
+        return "ARM64";
+    case PROCESSOR_ARCHITECTURE_INTEL:
+        return "x86";
+    default:
+        return "x86";
+    }
+}
+
+static int arch_is(const char *a, const char *b)
+{
+    return _stricmp(a, b) == 0;
+}
+
+/* Pick the Sysmon build that matches this Windows version and architecture.
+
+   Windows 6.0 / 6.1 (Vista/2008/7/2008 R2) needs the legacy 13.x build in
+   bina\Sysmon\sysmonwin7\; anything newer uses bina\Sysmon\ (15.x). If the
+   expected folder has no build the other folder is tried, then a legacy
+   Sysmon.exe next to the project root. Candidate order matches
+   scripts/lib_sysmon.ps1 and avengine/paths.py sysmon_candidates(). */
+static int pick_sysmon_exe(wchar_t *out, size_t cap)
+{
+    int major = 0, minor = 0;
+    const char *arch;
+    int legacy;
+    const wchar_t *primary_dir;
+    const wchar_t *other_dir;
+    const wchar_t *names[3];
+    int name_count = 0;
+    int i, pass;
+
+    get_windows_version(&major, &minor);
+    arch = native_arch_name();
+    legacy = (major == 6 && (minor == 0 || minor == 1));
+
+    if (legacy) {
+        primary_dir = L"\\bina\\Sysmon\\sysmonwin7";
+        other_dir = L"\\bina\\Sysmon";
+    } else {
+        primary_dir = L"\\bina\\Sysmon";
+        other_dir = L"\\bina\\Sysmon\\sysmonwin7";
+    }
+
+    if (arch_is(arch, "ARM64") && !legacy) {
+        names[name_count++] = L"\\Sysmon64a.exe";
+        names[name_count++] = L"\\Sysmon64.exe";
+        names[name_count++] = L"\\Sysmon.exe";
+    } else if (arch_is(arch, "x64")) {
+        names[name_count++] = L"\\Sysmon64.exe";
+        names[name_count++] = L"\\Sysmon.exe";
+    } else {
+        names[name_count++] = L"\\Sysmon.exe";
+    }
+
+    for (pass = 0; pass < 2; ++pass) {
+        const wchar_t *dir = (pass == 0) ? primary_dir : other_dir;
+        for (i = 0; i < name_count; ++i) {
+            if (wjoin(out, cap, g_root, dir, names[i], NULL, NULL))
+                if (path_exists(out))
+                    return 1;
+        }
+    }
+    if (wjoin(out, cap, g_root, L"\\Sysmon.exe", NULL, NULL, NULL) && path_exists(out))
+        return 1;
+
+    /* Nothing found: report the preferred location so the message is useful. */
+    wjoin(out, cap, g_root, primary_dir, names[0], NULL, NULL);
+    return 0;
+}
+
 static int step_sysmon(void)
 {
     wchar_t exe[MAX_PATH];
     wchar_t cfg[MAX_PATH];
     wchar_t cmd[CMD_LEN];
+    wchar_t exe_name[MAX_PATH];
+    int found = 0;
+    const wchar_t *slash;
 
-    if (!wjoin(exe, MAX_PATH, g_root, L"\\bina\\Sysmon\\Sysmon.exe",
-               NULL, NULL, NULL))
-        return STATUS_WARN;
-    if (!path_exists(exe) &&
-        !wjoin(exe, MAX_PATH, g_root, L"\\Sysmon.exe", NULL, NULL, NULL))
-        return STATUS_WARN;
     if (!wjoin(cfg, MAX_PATH, g_root, L"\\scripts\\sysmon_config.xml",
                NULL, NULL, NULL))
         return STATUS_WARN;
 
-    if (!path_exists(exe)) {
-        print_status(STATUS_WARN, "Sysmon.exe not found, skipping (realtime monitor unavailable)");
-        print_status(STATUS_WARN, "download it from %s into bina\\Sysmon\\", SYSMON_URL);
+    found = pick_sysmon_exe(exe, MAX_PATH);
+    slash = wcsrchr(exe, L'\\');
+    if (slash)
+        wcsncpy(exe_name, slash + 1, MAX_PATH - 1);
+    else
+        wcsncpy(exe_name, exe, MAX_PATH - 1);
+
+    if (!found) {
+        print_status(STATUS_WARN, "Sysmon not found, skipping (realtime monitor unavailable)");
+        print_status(STATUS_WARN, "expected %s", narrow(exe));
+        print_status(STATUS_WARN, "modern (Win8.1+) in bina\\Sysmon\\, legacy (Win7 SP1) in bina\\Sysmon\\sysmonwin7\\");
+        print_status(STATUS_WARN, "download it from %s", SYSMON_URL);
         return STATUS_WARN;
     }
+
+    {
+        int major = 0, minor = 0;
+        get_windows_version(&major, &minor);
+        print_status(STATUS_OK, "using %s (Windows %d.%d %s)",
+                     narrow(exe_name), major, minor, native_arch_name());
+    }
+
     if (!path_exists(cfg)) {
         print_status(STATUS_WARN, "missing %s, skipping Sysmon setup", narrow(cfg));
         return STATUS_WARN;
@@ -937,22 +1184,38 @@ static int step_verify(int verify_clamav)
         return STATUS_FAIL;
     }
 
-    /* 1) dependency imports */
+    /* 1) dependency imports（与 requirements.txt / pyproject.toml 保持一致：
+          C++ 内核重写后 yara-python / pyclamd / pywin32 已不再需要） */
     int rc = run_python(venv_py, g_root,
-                        "import yara, pyclamd, yaml, colorama; print('deps ok')", 0);
+                        "import yaml, colorama; print('deps ok')", 0);
     if (rc == 0) {
-        print_status(STATUS_OK, "imports OK (yara / pyclamd / yaml / colorama)");
+        print_status(STATUS_OK, "imports OK (PyYAML / colorama)");
     } else {
         print_status(STATUS_FAIL, "import failed, check the pip output above");
         return STATUS_FAIL;
     }
 
-    /* 2) YARA rule compilation */
+    /* 2) config.yaml 必须能解析：配置一坏，扫描会静默降级（YARA/ClamAV 被跳过） */
     rc = run_python(venv_py, g_root,
-                    "import sys; from avengine.yara_scanner import YaraScanner as S; "
-                    "s = S('rules'); "
-                    "print('yara rule files:', s.rules_count, 'skipped:', s.skipped_count); "
-                    "sys.exit(0 if s.is_available else 1)", 0);
+                    "import sys; from avengine.config import validate_config; "
+                    "err = validate_config('config.yaml'); "
+                    "print('config.yaml:', err or 'OK'); "
+                    "sys.exit(1 if err else 0)", 0);
+    if (rc == 0) {
+        print_status(STATUS_OK, "config.yaml parses");
+    } else {
+        print_status(STATUS_FAIL,
+                     "config.yaml is not parseable - delete it (it is regenerated on "
+                     "next run) or run: avengine.exe config --regenerate --force");
+        return STATUS_FAIL;
+    }
+
+    /* 3) YARA 规则 + clamd 状态（都走当前 C++ 内核，旧版 Python 引擎已归档到 legacy\\） */
+    rc = run_python(venv_py, g_root,
+                    "import sys; from avengine import core_bridge as c; "
+                    "st = c.engine_status('rules', '127.0.0.1', 3310, 5); "
+                    "print('yara:', st['yara']); print('clamav:', st['clamav']); "
+                    "sys.exit(0 if st['yara']['available'] else 1)", 0);
     if (rc == 0) {
         print_status(STATUS_OK, "YARA rule set compiled");
     } else {
@@ -960,18 +1223,19 @@ static int step_verify(int verify_clamav)
         return STATUS_FAIL;
     }
 
-    /* 3) clamd connectivity */
+    /* 4) clamd connectivity */
     if (verify_clamav) {
         rc = run_python(venv_py, g_root,
-                        "from avengine.clamav_scanner import ClamavScanner as C; "
-                        "c = C(); "
-                        "print('clamd:', c.get_version() or 'unavailable'); "
-                        "import sys; sys.exit(0 if c.is_available else 1)", 0);
+                        "import sys; from avengine import core_bridge as c; "
+                        "v = c.clam_version('127.0.0.1', 3310, 5); "
+                        "print('clamd:', v.get('version') or 'unavailable'); "
+                        "sys.exit(0 if v.get('available') else 1)", 0);
         if (rc == 0) {
             print_status(STATUS_OK, "ClamAV (clamd) reachable");
         } else {
             print_status(STATUS_WARN,
-                         "ClamAV unreachable, try scripts\\start_clamav.bat later");
+                         "ClamAV unreachable, try scripts\\start_clamav.bat later "
+                         "(clamd.log tells you why the service refused to start)");
             return STATUS_WARN;
         }
     }
@@ -1038,7 +1302,9 @@ static void print_usage(void)
            "Notes:\n"
            "  * Run as administrator (ClamAV service + Sysmon require it)\n"
            "  * Missing artifacts: bina\\clamav.msi  (%s)\n"
-           "                       bina\\Sysmon\\Sysmon.exe (%s)\n",
+           "                       bina\\Sysmon\\            modern Sysmon 15.x, Win8.1+\n"
+           "                       bina\\Sysmon\\sysmonwin7\\ legacy Sysmon 13.x, Win7 SP1\n"
+           "                       download: %s\n",
            CLAMAV_URL, SYSMON_URL);
 }
 
@@ -1089,7 +1355,7 @@ int wmain(int argc, wchar_t **argv)
         return 1;
     }
 
-    step_begin(3, total, "Python environment (venv + yara-python + pyclamd + pytest)");
+    step_begin(3, total, "Python environment (venv + colorama + PyYAML + pytest)");
     int st;
     if (no_python) {
         print_status(STATUS_SKIP, "--no-python: skipped");
